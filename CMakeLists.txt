@@ -66,4 +66,13 @@ if(WOTS4_BUILD_TESTS)
         LINK_OPTIONS /BASE:0x10000000 /DYNAMICBASE
         ARGS ${unpacked_native} $<TARGET_FILE:mod_bug_fix> NEEDS_EXE)
     add_dependencies(display_mode_check_native_probe mod_bug_fix)
+    # Checks, with synthetic window states, when full screen must be applied again on activation
+    wots4_add_probe(full_screen_reapply_probe SOURCES tests/full_screen_reapply_probe.cpp
+        INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    # Loads mod.dll into a copy of the exe and runs the game's full screen setup with fake window,
+    # display and renderer calls (no real window, display mode or device is changed)
+    wots4_add_probe(full_screen_reapply_native_probe SOURCES tests/full_screen_reapply_native_probe.cpp
+        LINK_OPTIONS /BASE:0x10000000 /DYNAMICBASE
+        ARGS ${unpacked_native} $<TARGET_FILE:mod_bug_fix> NEEDS_EXE)
+    add_dependencies(full_screen_reapply_native_probe mod_bug_fix)
 endif()

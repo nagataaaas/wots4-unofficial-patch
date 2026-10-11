@@ -24,6 +24,12 @@
 // changes the display mode. While 0x5383d0 runs, the thread uses per-monitor
 // DPI awareness so the check compares physical pixels.
 //
+// Full screen re-apply skip: on window activation, skip applying full screen
+// again (0x538180) when the display mode and the window already match, so the
+// window is not resized past the screen, does not show its white background,
+// and the device is not reset. A really lost device is still reset by the
+// renderer at the next frame.
+//
 // Each fix is installed on its own, so a changed game or another Mod's hook
 // on one of them does not stop the others. Each can be turned off in
 // config.ini ([<section>] enabled=0).
@@ -36,6 +42,7 @@
 #include "follow_detach.h"
 #include "property_return.h"
 #include "translucent_depth.h"
+#include "full_screen_reapply.h"
 
 namespace {
 
@@ -352,6 +359,97 @@ void resolveSetThreadDpiAwarenessContext() {
 
 // ---- Installation
 
+// ---- Full screen re-apply skip
+
+// Window.cpp: applies full screen (true) or windowed mode (false). eax = the window object,
+// the bool on the stack, ret 4. Called with true on every WM_ACTIVATEAPP (0x538561).
+constexpr uintptr_t applyFullScreen = 0x538180;
+constexpr uint32_t applyFullScreenHookLength = 7;  // push ebp; mov ebp,esp; cmp byte [ebp+8],0
+constexpr uintptr_t settingsWidth = 0x9d30d4;
+constexpr uintptr_t settingsHeight = 0x9d30d8;
+constexpr uint32_t windowHandleOffset = 0x4;   // HWND in the window object
+constexpr uint32_t fullScreenOffset = 0xec;     // bool, set by 0x538180
+
+void* originalApplyFullScreen;
+
+bool applyFullScreenCodeMatches() {
+    const unsigned char prologue[] = {0x55,0x8b,0xec,0x80,0x7d,0x08,0x00,0x53,0x56,0x57,0x8b,0xf0};
+    const unsigned char loadSize[] = {0xa1,0,0,0,0,0x8b,0x1d};               // mov eax,[height]; mov ebx,[width]
+    const unsigned char setFullScreen[] = {0xc6,0x86,0xec,0x00,0x00,0x00,0x01};  // mov byte [esi+0xec],1
+    const unsigned char hwndUse[] = {0x8b,0x56,0x04};                           // mov edx,[esi+4] (SetWindowLongA)
+    return same(applyFullScreen,prologue,sizeof(prologue)) && same(0x53818e,loadSize,1) &&
+        same(0x538193,loadSize+5,2) && readGamePointer(0x53818f)==va(settingsHeight) &&
+        readGamePointer(0x538195)==va(settingsWidth) && same(0x53819b,setFullScreen,sizeof(setFullScreen)) &&
+        same(0x5381c9,hwndUse,sizeof(hwndUse));
+}
+
+// The primary screen in physical pixels, or 0x0 without per-thread DPI awareness.
+void physicalScreenSize(int& width, int& height) {
+    width=height=0;
+    if(!setThreadDpiAwarenessContext)
+        return;
+    auto getSystemMetrics=reinterpret_cast<int (WINAPI*)(int)>(readGamePointer(getSystemMetricsImport));
+    HANDLE previous=setThreadDpiAwarenessContext(perMonitorDpiAwareness);
+    width=getSystemMetrics(SM_CXSCREEN);
+    height=getSystemMetrics(SM_CYSCREEN);
+    setThreadDpiAwarenessContext(previous);
+}
+
+bug_fix::FullScreenState readFullScreenState(uintptr_t window, bool requestedFullScreen) {
+    bug_fix::FullScreenState state{};
+    state.requestedFullScreen=requestedFullScreen;
+    state.alreadyFullScreen=*reinterpret_cast<const uint8_t*>(window+fullScreenOffset)!=0;
+    state.wantedWidth=static_cast<int>(readGamePointer(settingsWidth));
+    state.wantedHeight=static_cast<int>(readGamePointer(settingsHeight));
+    physicalScreenSize(state.physicalWidth,state.physicalHeight);
+    auto handle=*reinterpret_cast<const HWND*>(window+windowHandleOffset);
+    state.minimized=IsIconic(handle)!=FALSE;
+    LONG style=GetWindowLongW(handle,GWL_STYLE);
+    state.popupStyle=(style&WS_POPUP)&&!(style&(WS_CAPTION|WS_THICKFRAME));
+    RECT rect{};
+    GetWindowRect(handle,&rect);
+    state.windowLeft=rect.left; state.windowTop=rect.top; state.windowRight=rect.right; state.windowBottom=rect.bottom;
+    // In the thread's current DPI awareness, the window's own, like GetWindowRect.
+    auto getSystemMetrics=reinterpret_cast<int (WINAPI*)(int)>(readGamePointer(getSystemMetricsImport));
+    state.screenWidth=getSystemMetrics(SM_CXSCREEN);
+    state.screenHeight=getSystemMetrics(SM_CYSCREEN);
+    return state;
+}
+
+// Runs when the window is activated or the display mode is switched, not every frame, so it may log.
+bool __cdecl skipFullScreenReapply(uintptr_t window, int requestedFullScreen) {
+    auto state=readFullScreenState(window,(requestedFullScreen&0xff)!=0);
+    if(!state.requestedFullScreen)
+        return false;  // Leaving full screen is not a re-apply; nothing to log
+    auto reason=bug_fix::fullScreenReapplyReason(state);
+    char line[220];
+    if(reason)
+        sprintf_s(line,"full screen applied again: %s",reason);
+    else
+        sprintf_s(line,"full screen re-apply skipped: the display is already %dx%d and the window covers it",
+            state.physicalWidth,state.physicalHeight);
+    log(line);
+    return reason==nullptr;
+}
+
+// 0x538180 takes the window object in eax. When the call is not skipped, jump to the original
+// with the caller's stack and eax unchanged, so it returns to the caller itself.
+__declspec(naked) void applyFullScreenHook() {
+    __asm {
+        push eax
+        push dword ptr [esp+8]
+        push eax
+        call skipFullScreenReapply
+        add esp, 8
+        test al, al
+        pop eax
+        jnz skip
+        jmp dword ptr [originalApplyFullScreen]
+    skip:
+        ret 4
+    }
+}
+
 // ---- Settings
 
 wchar_t configPath[1024];  // mods\bug_fix\config.ini
@@ -400,6 +498,9 @@ Fix fixes[] = {
     {L"physical_screen_check","physical screen size check",displayModeCheck,displayModeCheckHookLength,
         reinterpret_cast<void*>(&displayModeCheckHook),&originalDisplayModeCheck,
         displayModeCheckCodeMatches,false},
+    {L"skip_full_screen_reapply","full screen re-apply skip",applyFullScreen,applyFullScreenHookLength,
+        reinterpret_cast<void*>(&applyFullScreenHook),&originalApplyFullScreen,
+        applyFullScreenCodeMatches,false},
 };
 
 // Checks the setting and the code, and reserves the hook range. Logs why a fix is skipped.
