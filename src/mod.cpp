@@ -18,12 +18,14 @@
 // when the device does not exist yet.
 //
 // Each fix is installed on its own, so a changed game or another Mod's hook
-// on one of them does not stop the others.
+// on one of them does not stop the others. Each can be turned off in
+// config.ini ([<section>] enabled=0).
 #include <wots4/mod_api.h>
 #include <MinHook.h>
 #include <d3d9.h>
 #include <cstdio>
 #include <cstring>
+#include <cwchar>
 #include "follow_detach.h"
 #include "property_return.h"
 #include "translucent_depth.h"
@@ -259,7 +261,35 @@ bool installTranslucentDepthMask() {
 
 // ---- Installation
 
+// ---- Settings
+
+wchar_t configPath[1024];  // mods\bug_fix\config.ini
+
+bool findConfig(const wchar_t* modDirectory) {
+    return modDirectory&&swprintf_s(configPath,L"%sconfig.ini",modDirectory)>=0;
+}
+
+// [section] enabled in config.ini. A missing file or key enables the fix, so the Mod works without the file.
+bool fixEnabled(const wchar_t* section) {
+    wchar_t value[16];
+    GetPrivateProfileStringW(section,L"enabled",L"1",value,ARRAYSIZE(value),configPath);
+    if(!wcscmp(value,L"1"))
+        return true;
+    char line[200];
+    if(!wcscmp(value,L"0")) {
+        sprintf_s(line,"[%ls] disabled in config.ini (enabled=0); not installed",section);
+        log(line);
+        return false;
+    }
+    sprintf_s(line,"config.ini: [%ls] enabled=%ls is not a valid value (use 1 or 0); using 1",section,value);
+    log(line);
+    return true;
+}
+
+// ---- Installation
+
 struct Fix {
+    const wchar_t* section;  // In config.ini
     const char* name;
     uintptr_t target;
     uint32_t hookLength;
@@ -270,15 +300,18 @@ struct Fix {
 };
 
 Fix fixes[] = {
-    {"follow-effect detach",releaseEffects,releaseHookLength,reinterpret_cast<void*>(&releaseEffectsHook),
-        reinterpret_cast<void**>(&originalReleaseEffects),followDetachCodeMatches,false},
-    {"property return after Madara's rescue",setNextScript,setNextScriptHookLength,
+    {L"follow_detach","follow-effect detach",releaseEffects,releaseHookLength,
+        reinterpret_cast<void*>(&releaseEffectsHook),reinterpret_cast<void**>(&originalReleaseEffects),
+        followDetachCodeMatches,false},
+    {L"property_return","property return after Madara's rescue",setNextScript,setNextScriptHookLength,
         reinterpret_cast<void*>(&setNextScriptHook),reinterpret_cast<void**>(&originalSetNextScript),
         propertyReturnCodeMatches,false},
 };
 
-// Checks the code and reserves the hook range. Logs why a fix is skipped.
+// Checks the setting and the code, and reserves the hook range. Logs why a fix is skipped.
 bool select(Fix& fix) {
+    if(!fixEnabled(fix.section))
+        return false;
     char line[160];
     if(!fix.codeMatches()) {
         sprintf_s(line,"%s skipped: the game code at 0x%x is not the known version",fix.name,
@@ -337,6 +370,10 @@ extern "C" BOOL WINAPI ModInitialize(const wots4::ModContext* context) {
     host=context->host;
     self=context->module;
     gameBase=reinterpret_cast<uintptr_t>(context->game);
+    if(!findConfig(context->directory)) {
+        log("the path of config.ini is too long; nothing changed");
+        return FALSE;
+    }
     bool anySelected=false;
     for(auto& fix:fixes)
         anySelected|=fix.selected=select(fix);
@@ -351,7 +388,7 @@ extern "C" BOOL WINAPI ModInitialize(const wots4::ModContext* context) {
             fix.selected=false;
         anySelected=false;
     }
-    bool depthMaskInstalled=installTranslucentDepthMask();
+    bool depthMaskInstalled=fixEnabled(L"translucent_depth")&&installTranslucentDepthMask();
     if(!anySelected&&!depthMaskInstalled) {
         log("no fix can be installed; nothing changed");
         MH_Uninitialize();

@@ -17,6 +17,7 @@ wots4_use_minhook()
 # Not released until it is confirmed in the actual game
 wots4_add_mod(bug_fix SOURCES src/mod.cpp DEF src/mod.def
     LIBS wots4_minhook
+    FILES config.ini
     LICENSES docs/licenses/minhook.txt
     NO_RELEASE)
 target_include_directories(mod_bug_fix PRIVATE src)
@@ -54,4 +55,9 @@ if(WOTS4_BUILD_TESTS)
         LINK_OPTIONS /BASE:0x10000000 /DYNAMICBASE
         ARGS ${unpacked_native} $<TARGET_FILE:mod_bug_fix> NEEDS_EXE)
     add_dependencies(translucent_depth_native_probe mod_bug_fix)
+    # Loads mod.dll into a copy of the exe with config.ini files that turn fixes off (the game is not started)
+    wots4_add_probe(config_native_probe SOURCES tests/config_native_probe.cpp
+        LINK_OPTIONS /BASE:0x10000000 /DYNAMICBASE
+        ARGS ${unpacked_native} $<TARGET_FILE:mod_bug_fix> NEEDS_EXE)
+    add_dependencies(config_native_probe mod_bug_fix)
 endif()

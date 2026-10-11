@@ -27,11 +27,24 @@ Detailed explanations of each fix (what the problem is, why it happens, the fixe
 1. Other crashes (the screen turns white and freezes when you return to the window, etc.)
 2. Other display bugs
 
+## Settings (config.ini)
+
+`mods/bug_fix/config.ini` has a section for each fix (`[<fix name>]`). `enabled=1` installs the fix, `0` does not (the game stays as it is). Without the file or a key, every fix is installed.
+
+| Section | Fix |
+| --- | --- |
+| `[follow_detach]` | 1. Crash at the ending after resuming from the photographer in the jail |
+| `[property_return]` | 2. Property not given back after Madara's rescue |
+| `[translucent_depth]` | 3. White or black boxes around effects |
+
+A fix that is not installed is written to `mod_loader.log` as `[<fix name>] disabled in config.ini`. A value other than `1` or `0` is treated as `1`, and the log says so. The settings are read when the game starts.
+
 ## Adding or changing a fix
 
 1. Copy [`docs/fixes/TEMPLATE.md`](docs/fixes/TEMPLATE.md) to `docs/fixes/<fix name>.md` and fill in every section.
 2. When you write or change the code of a fix, update its document in the same change (status, cause, chosen fix, test results, etc.).
 3. Update the "Fixes" list above as well.
+4. Add a section for the fix to `config.ini`, and update the "Settings" table above.
 
 ## Building
 
