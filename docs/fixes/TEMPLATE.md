@@ -8,9 +8,7 @@ This file is public. Keep the technical part short: the addresses the code needs
 brief reason. Detailed analysis (how it was found, dumps, disassembly) stays in
 research/notes/ and is not linked from here.
 
-Mark uncertain statements with the confidence marks used in the code
-(🟡 / 🔶 / ❓, U-n), and write "needs in-game confirmation" for anything not yet
-checked in the game.
+Write "needs in-game confirmation" for anything not yet checked in the game.
 -->
 
 - Status: <investigating | implemented, needs in-game confirmation | confirmed in game | dropped>
@@ -34,7 +32,7 @@ What the player sees (UX view). No internals here.
 Why it happens (technical view).
 - What goes wrong in the game code, with the addresses involved
 - Why it only happens under the conditions above
-- What is still unknown (U-n), with its confidence mark
+- What is still unknown
 -->
 
 ## Possible fixes
