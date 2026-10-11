@@ -18,11 +18,14 @@ Detailed explanations of each fix (what the problem is, why it happens, the fixe
    - The restore (`PlayerGiveProperty`) exists only in the scene after defeating the three sisters, and the rescue branch never called it. The weapons are kept in memory that is not saved, so saving and loading in this state loses them. When the script moves to the scene after the rescue (`BR_14_00_S210`, at `0x55e140`) while the property is still taken, this Mod calls the game's own restore.
    - When it gives them back, it writes `returned the player's weapons, items and outfit after Madara's rescue` to `mod_loader.log`.
    - Weapons in a save already made in this state cannot be restored.
+3. Effects such as the glow (bloom) and the effect when you kick someone get a white or black box around them (confirmed in game. [Details](docs/fixes/effect_box.md))
+   - The scene is drawn to two textures at once: the color, and the depth that depth of field (DoF) reads. An effect's square quad changed the depth of its whole rectangle, transparent parts included, so the DoF blur and contrast changed in the shape of the quad. While drawing with alpha blending, this Mod keeps the depth texture unwritten (by hooking `IDirect3DDevice9::SetRenderState`).
+   - When it is installed, it writes `translucent depth mask installed` to `mod_loader.log`.
 
 ## Planned
 
 1. Other crashes (the screen turns white and freezes when you return to the window, etc.)
-2. Display and other bugs (black squares behind particle effects, etc.)
+2. Other display bugs
 
 ## Adding or changing a fix
 

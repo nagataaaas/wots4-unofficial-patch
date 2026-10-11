@@ -103,13 +103,14 @@ int main(int argc, char** argv) {
     if(!initialize) { printf("RESULT tests=%u failures=%u\n",tests,failures+1); return 1; }
     check("an incompatible context is refused",!initialize(&invalid)&&claims.empty());
 
-    // An exe where the code of both fixes changed is refused before anything is claimed or written.
+    // An exe where the code of every fix changed is refused before anything is claimed or written.
     auto joint=(unsigned char*)va(0x56590e);
     auto setTaken=(unsigned char*)va(0x553f50);
-    joint[3]=0x4c; setTaken[6]=2;
+    auto deviceOffset=(unsigned char*)va(0x88e10b);  // 0x2238 in mov eax,[eax+0x2238]
+    joint[3]=0x4c; setTaken[6]=2; deviceOffset[0]=0x3c;
     check("an unknown exe is refused without changes",
         !initialize(&context)&&claims.empty()&&!memcmp((void*)va(0x48d520),original,sizeof(original)));
-    joint[3]=0x48; setTaken[6]=1;
+    joint[3]=0x48; setTaken[6]=1; deviceOffset[0]=0x38;
 
     check("the Mod initializes on the known exe",initialize(&context)!=FALSE);
     check("the Mod claims 5 bytes at 0x48d520 and 5 at 0x55e140",
