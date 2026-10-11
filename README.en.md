@@ -26,12 +26,12 @@ Detailed explanations of each fix (what the problem is, why it happens, the fixe
    - The game is not DPI aware, so when Windows scaling is not 100%, it gets the screen size before scaling (3072x1728 for 3840x2160 at 125%). Its "the screen already has the wanted resolution, do not change it" check never matched, so it changed the resolution every time you returned. While that check runs (`0x5383d0`), this Mod makes it see the screen size in physical pixels.
    - The game also applied full screen again every time you returned (`0x538180`): it made the window larger than the screen before fixing it, and reset the render device. When neither the resolution nor the window changed, this Mod skips that. A device that was really lost is still recovered by the game's renderer at the next frame.
    - Each time you return, it writes `display mode check: ...` and `full screen re-apply skipped: ...` (or `full screen applied again: <reason>`) to `mod_loader.log`.
+   - As a safety net, this Mod also stops painting the window background white (confirmed in game). The game's window has a white background, and when it was repainted while full screen had to be applied again (a resolution in the settings that differs from the screen, Alt+Enter and so on) it showed white. This Mod answers the request to paint the background (`WM_ERASEBKGND`) without painting, so the last frame stays (`0x5384c0`).
 
 ## Planned
 
-1. If a white flash remains when returning to the window, stop painting the background white
-2. Other crashes
-3. Other display bugs
+1. Other crashes
+2. Other display bugs
 
 ## Settings (config.ini)
 
@@ -44,6 +44,7 @@ Detailed explanations of each fix (what the problem is, why it happens, the fixe
 | `[translucent_depth]` | 3. White or black boxes around effects |
 | `[physical_screen_check]` | 4. White screen and freeze on returning to the window (resolution check) |
 | `[skip_full_screen_reapply]` | 4. White screen and freeze on returning to the window (skip applying full screen again) |
+| `[no_white_background]` | 4. White screen and freeze on returning to the window (no white background) |
 
 A fix that is not installed is written to `mod_loader.log` as `[<fix name>] disabled in config.ini`. A value other than `1` or `0` is treated as `1`, and the log says so. The settings are read when the game starts.
 

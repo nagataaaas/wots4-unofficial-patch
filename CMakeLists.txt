@@ -75,4 +75,10 @@ if(WOTS4_BUILD_TESTS)
         LINK_OPTIONS /BASE:0x10000000 /DYNAMICBASE
         ARGS ${unpacked_native} $<TARGET_FILE:mod_bug_fix> NEEDS_EXE)
     add_dependencies(full_screen_reapply_native_probe mod_bug_fix)
+    # Loads mod.dll into a copy of the exe and sends messages to the game's window procedure
+    # with a recording DefWindowProcA (no window is painted)
+    wots4_add_probe(window_background_native_probe SOURCES tests/window_background_native_probe.cpp
+        LINK_OPTIONS /BASE:0x10000000 /DYNAMICBASE
+        ARGS ${unpacked_native} $<TARGET_FILE:mod_bug_fix> NEEDS_EXE)
+    add_dependencies(window_background_native_probe mod_bug_fix)
 endif()

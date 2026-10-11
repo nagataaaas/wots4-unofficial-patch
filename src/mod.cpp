@@ -30,6 +30,10 @@
 // and the device is not reset. A really lost device is still reset by the
 // renderer at the next frame.
 //
+// No white background: the game's window procedure (0x5384c0) answers
+// WM_ERASEBKGND itself, so a repaint keeps the last frame instead of the
+// window class's white brush.
+//
 // Each fix is installed on its own, so a changed game or another Mod's hook
 // on one of them does not stop the others. Each can be turned off in
 // config.ini ([<section>] enabled=0).
@@ -450,6 +454,36 @@ __declspec(naked) void applyFullScreenHook() {
     }
 }
 
+// ---- No white background
+
+// The window procedure registered for the game's window (0x538896). The class brush is WHITE_BRUSH
+// (0x5388cf) and WM_ERASEBKGND goes to DefWindowProcA, so any repaint before the next frame is white.
+constexpr uintptr_t windowProcedure = 0x5384c0;
+constexpr uint32_t windowProcedureHookLength = 6;  // push ebp; mov ebp,esp; push ecx; xor eax,eax
+constexpr uintptr_t windowObject = 0x9ecf90;
+constexpr uintptr_t getStockObjectImport = 0x905010;
+
+WNDPROC originalWindowProcedure;
+
+bool windowProcedureCodeMatches() {
+    const unsigned char prologue[] = {0x55,0x8b,0xec,0x51,0x33,0xc0,0x39,0x05};  // ...; cmp [0x9ecf90],eax
+    const unsigned char registerProcedure[] = {0xc7,0x45,0xd4};                // mov [ebp-0x2c],0x5384c0
+    const unsigned char whiteBrushIndex[] = {0x6a,0x00};  // push 0 (WHITE_BRUSH)
+    const unsigned char getStockObject[] = {0xff,0x15};   // call [GetStockObject]
+    return same(windowProcedure,prologue,sizeof(prologue)) && readGamePointer(0x5384c8)==va(windowObject) &&
+        same(0x538896,registerProcedure,sizeof(registerProcedure)) &&
+        readGamePointer(0x538899)==va(windowProcedure) && same(0x5388ca,whiteBrushIndex,sizeof(whiteBrushIndex)) &&
+        same(0x5388cf,getStockObject,sizeof(getStockObject)) && readGamePointer(0x5388d1)==va(getStockObjectImport);
+}
+
+// Runs for every message of the game's window, so it only compares and forwards.
+// Leaving the background unpainted keeps the last frame on the screen until the game presents again.
+LRESULT CALLBACK windowProcedureHook(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
+    if(message==WM_ERASEBKGND)
+        return 1;
+    return originalWindowProcedure(window,message,wParam,lParam);
+}
+
 // ---- Settings
 
 wchar_t configPath[1024];  // mods\bug_fix\config.ini
@@ -501,6 +535,9 @@ Fix fixes[] = {
     {L"skip_full_screen_reapply","full screen re-apply skip",applyFullScreen,applyFullScreenHookLength,
         reinterpret_cast<void*>(&applyFullScreenHook),&originalApplyFullScreen,
         applyFullScreenCodeMatches,false},
+    {L"no_white_background","no white background",windowProcedure,windowProcedureHookLength,
+        reinterpret_cast<void*>(&windowProcedureHook),reinterpret_cast<void**>(&originalWindowProcedure),
+        windowProcedureCodeMatches,false},
 };
 
 // Checks the setting and the code, and reserves the hook range. Logs why a fix is skipped.
