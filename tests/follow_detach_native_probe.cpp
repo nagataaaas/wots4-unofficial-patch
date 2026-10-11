@@ -1,32 +1,12 @@
 // Runs the game's own effect update (0x4a4c80) and character effect release
 // (0x48d520) from a copy of the exe mapped into this process, with mod.dll
 // installed on it. Never attaches to the game process or reads saves.
-#include <windows.h>
-#include <cstdio>
-#include <cstring>
-#include <fstream>
-#include <iterator>
-#include <string>
-#include <vector>
-#include <wots4/mod_api.h>
+#include <cstdlib>
+#include "mapped_exe.h"
 
-static unsigned imageBase;
-static unsigned va(unsigned address) { return imageBase+address-0x400000; }
-static unsigned tests, failures;
+using namespace mapped_exe;
+
 static unsigned exceptionCode, exceptionAddress, exceptionReadAddress;
-static void check(const char* label, bool passed) {
-    ++tests; if(!passed) ++failures;
-    printf("%s %s\n",passed?"PASS":"FAIL",label);
-}
-
-// Host recorded by the fake ModLoader.
-static unsigned claimAddress, claimLength, claims, releases;
-static std::string logged;
-static void WINAPI hostLog(HMODULE, const char* message) { logged+=message; logged+="\n"; printf("  log: %s\n",message); }
-static BOOL WINAPI hostClaim(HMODULE, uintptr_t address, uint32_t length) {
-    ++claims; claimAddress=(unsigned)address; claimLength=length; return TRUE;
-}
-static void WINAPI hostRelease(HMODULE) { ++releases; }
 
 static int filter(EXCEPTION_POINTERS* e) {
     exceptionCode=e->ExceptionRecord->ExceptionCode;
@@ -53,43 +33,6 @@ static bool releaseEffects(void* character) {
         __asm { mov ecx, character }
         __asm { call function }
     } __except(filter(GetExceptionInformation())) { return false; }
-    return true;
-}
-
-static bool mapImage(const char* path) {
-    std::ifstream f(path,std::ios::binary);
-    std::vector<unsigned char> bytes((std::istreambuf_iterator<char>(f)),{});
-    if(bytes.size()<4096) return false;
-    auto dos=(IMAGE_DOS_HEADER*)bytes.data();
-    if(dos->e_magic!=IMAGE_DOS_SIGNATURE || (unsigned)dos->e_lfanew>bytes.size()-sizeof(IMAGE_NT_HEADERS32)) return false;
-    auto nt=(IMAGE_NT_HEADERS32*)(bytes.data()+dos->e_lfanew);
-    if(nt->Signature!=IMAGE_NT_SIGNATURE || nt->FileHeader.Machine!=IMAGE_FILE_MACHINE_I386 ||
-        nt->OptionalHeader.ImageBase!=0x400000) return false;
-    auto base=(unsigned char*)VirtualAlloc(nullptr,nt->OptionalHeader.SizeOfImage,
-        MEM_RESERVE|MEM_COMMIT,PAGE_EXECUTE_READWRITE);
-    if(!base) return false;
-    imageBase=(unsigned)base;
-    memcpy(base,bytes.data(),nt->OptionalHeader.SizeOfHeaders);
-    auto sections=IMAGE_FIRST_SECTION(nt);
-    for(unsigned i=0;i<nt->FileHeader.NumberOfSections;++i) {
-        auto& s=sections[i];
-        if((size_t)s.PointerToRawData+s.SizeOfRawData>bytes.size() ||
-            (size_t)s.VirtualAddress+s.SizeOfRawData>nt->OptionalHeader.SizeOfImage) return false;
-        memcpy(base+s.VirtualAddress,bytes.data()+s.PointerToRawData,s.SizeOfRawData);
-    }
-    auto reloc=nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
-    for(unsigned pos=reloc.VirtualAddress;pos<reloc.VirtualAddress+reloc.Size;) {
-        auto block=(IMAGE_BASE_RELOCATION*)(base+pos);
-        if(block->SizeOfBlock<8 || pos+block->SizeOfBlock>nt->OptionalHeader.SizeOfImage) return false;
-        auto entries=(WORD*)(block+1);
-        for(unsigned i=0;i<(block->SizeOfBlock-8)/2;++i) {
-            if((entries[i]>>12)==IMAGE_REL_BASED_HIGHLOW)
-                *(unsigned*)(base+block->VirtualAddress+(entries[i]&0xfff))+=imageBase-0x400000;
-            else if(entries[i]>>12) return false;
-        }
-        pos+=block->SizeOfBlock;
-    }
-    // No PE entry point, TLS, Steam imports, save, or game assets are executed.
     return true;
 }
 
@@ -158,18 +101,23 @@ int main(int argc, char** argv) {
     wots4::ModContext invalid{}, context{sizeof(context),wots4::modApiVersion,nullptr,mod,(HMODULE)imageBase,L".\\",&host};
     check("mod.dll exports Wots4ModInitialize",initialize!=nullptr);
     if(!initialize) { printf("RESULT tests=%u failures=%u\n",tests,failures+1); return 1; }
-    check("an incompatible context is refused",!initialize(&invalid)&&claims==0);
+    check("an incompatible context is refused",!initialize(&invalid)&&claims.empty());
 
-    // A changed exe is refused before anything is claimed or written.
-    auto code=(unsigned char*)va(0x56590e);
-    code[3]=0x4c;
+    // An exe where the code of both fixes changed is refused before anything is claimed or written.
+    auto joint=(unsigned char*)va(0x56590e);
+    auto setTaken=(unsigned char*)va(0x553f50);
+    joint[3]=0x4c; setTaken[6]=2;
     check("an unknown exe is refused without changes",
-        !initialize(&context)&&claims==0&&!memcmp((void*)va(0x48d520),original,sizeof(original)));
-    code[3]=0x48;
+        !initialize(&context)&&claims.empty()&&!memcmp((void*)va(0x48d520),original,sizeof(original)));
+    joint[3]=0x48; setTaken[6]=1;
 
     check("the Mod initializes on the known exe",initialize(&context)!=FALSE);
-    check("the Mod claims 5 bytes at 0x48d520",claims==1&&claimAddress==va(0x48d520)&&claimLength==5&&releases==0);
+    check("the Mod claims 5 bytes at 0x48d520 and 5 at 0x55e140",
+        claims.size()==2&&claimed(0x48d520,5)&&claimed(0x55e140,5)&&releases==0);
     check("the hook is written at 0x48d520",*(unsigned char*)va(0x48d520)==0xe9);
+    check("both fixes are logged as installed",
+        loggedText("follow-effect detach installed at 0x48d520")&&
+        loggedText("property return after Madara's rescue installed at 0x55e140"));
 
     check("character effect release runs through the hook",releaseEffects(character));
     bool auraDetached=true;

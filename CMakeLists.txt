@@ -25,6 +25,9 @@ if(WOTS4_BUILD_TESTS)
     # Checks, with synthetic data, the detach of effects that follow a character model's joints
     wots4_add_probe(follow_detach_probe SOURCES tests/follow_detach_probe.cpp
         INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    # Checks, with synthetic names and flags, when the confiscated property is given back
+    wots4_add_probe(property_return_probe SOURCES tests/property_return_probe.cpp
+        INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src)
     # Examines the failure conditions of the scene models and the achievement code on a copy of the exe
     # (the game is not started). Not yet matched against the ending crash reported in the actual game.
     set(WOTS4_UNPACKED_EXE "${WOTS4_ROOT}/research/bin/WayOfTheSamurai4.unpacked.exe" CACHE FILEPATH "Decrypted exe")
@@ -37,4 +40,9 @@ if(WOTS4_BUILD_TESTS)
         LINK_OPTIONS /BASE:0x10000000 /DYNAMICBASE
         ARGS ${unpacked_native} $<TARGET_FILE:mod_bug_fix> NEEDS_EXE)
     add_dependencies(follow_detach_native_probe mod_bug_fix)
+    # Loads mod.dll into a copy of the exe and runs the hooked SetNextScript (the game is not started)
+    wots4_add_probe(property_return_native_probe SOURCES tests/property_return_native_probe.cpp
+        LINK_OPTIONS /BASE:0x10000000 /DYNAMICBASE
+        ARGS ${unpacked_native} $<TARGET_FILE:mod_bug_fix> NEEDS_EXE)
+    add_dependencies(property_return_native_probe mod_bug_fix)
 endif()

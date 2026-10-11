@@ -1,9 +1,9 @@
 # Crash right after the final boss when resuming at the jail photographer
 
 - Status: confirmed in game (reported 2026-10-11)
-- Code: `src/mod.cpp` (`releaseEffectsHook`, `knownGame`), `src/follow_detach.h` (`detachJointFollowers`), hook at `0x48d520`
-- Tests: `follow_detach_probe` (11 passed, 0 failed), `follow_detach_native_probe` (15 passed, 0 failed, label `needs_exe`)
-- Last updated: 2026-10-11
+- Code: `src/mod.cpp` (`releaseEffectsHook`, `followDetachCodeMatches`), `src/follow_detach.h` (`detachJointFollowers`), hook at `0x48d520`
+- Tests: `follow_detach_probe` (11 passed, 0 failed), `follow_detach_native_probe` (16 passed, 0 failed, label `needs_exe`)
+- Last updated: 2026-10-12
 
 ## Problem
 
@@ -43,7 +43,7 @@ Still unknown: why Kinugawa's model is freed during that scene only after resumi
 Approach 1. It removes the dangling pointer at the point where the game already detaches effects, it costs nothing per frame, and it also covers other scripts that attach effects to joints.
 
 - The Mod hooks `0x48d520` with MinHook. After the original function, it reads the effect manager `[0x9e966c]` and the character's model `[character+0x18]`. That model is still the one about to be freed or replaced. The Mod then clears `+8` of every effect among the 350 slots (`+0x1c`) whose `+8` is one of the model's 23 joints (`+0x48`, `JOINT_ID_END` = 0x17). Effects that do not follow a joint, effects that follow other models, and effects without a target are left alone.
-- Safety checks at startup: the Mod compares the bytes at `0x48d520`, `0x4a8ec0`, `0x56590e` and `0x48d54e`, and checks that `0x48d550` points at `0x9e966c`. If anything differs, it changes nothing and writes `unknown game version; nothing changed` to `mod_loader.log`. It claims 5 bytes at `0x48d520` through `HostApi::claim`.
+- Safety checks at startup: the Mod compares the bytes at `0x48d520`, `0x4a8ec0`, `0x56590e` and `0x48d54e`, and checks that `0x48d550` points at `0x9e966c`. If anything differs, it skips this fix (the other fixes are still installed) and writes `follow-effect detach skipped: the game code at 0x48d520 is not the known version` to `mod_loader.log`. It claims 5 bytes at `0x48d520` through `HostApi::claim`.
 - What the player may notice: a detached aura stays where it was instead of following the character. Each time effects are detached, `mod_loader.log` gets a line `detached N effect(s) from the joints of a released model`.
 - Verification:
   - `follow_detach_probe` checks the detach on synthetic data.
@@ -56,4 +56,4 @@ Approach 1. It removes the dangling pointer at the point where the game already 
 
 - Effect groups that keep their own 350 slots (`0x4a64c0`) are not scanned. No crash has been traced to them.
 - The reason the model is freed mid-scene after resuming at the jail photographer (U-CF-2) is still open. If it also leaves other references to the old model, they would show up as a different crash.
-- After a game update, check the byte patterns in `knownGame` first. The Mod disables itself if they no longer match.
+- After a game update, check the byte patterns in `followDetachCodeMatches` first. The Mod skips this fix if they no longer match.
