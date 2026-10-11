@@ -11,9 +11,10 @@
 // BR_14_00_S210 while the player's property is still taken, call the game's
 // PlayerGiveProperty (0x553f60), as BR_14_00_S140 does on the other branch.
 //
-// Translucent depth mask: while alpha blending is on, translucent draws do not
-// write the depth texture that depth of field reads (render target 1), so
-// effects no longer get a white or black box around them. Hooks the game's
+// Translucent depth mask: draws with alpha blending on and Z writing off
+// (effects) do not write the depth texture that depth of field reads (render
+// target 1), so effects no longer get a white or black box around them.
+// Characters are blended too but write Z, so they keep writing it. Hooks the game's
 // IDirect3DDevice9::SetRenderState, or IDirect3D9::CreateDevice to reach it
 // when the device does not exist yet.
 //
@@ -169,15 +170,20 @@ HRESULT STDMETHODCALLTYPE setRenderStateHook(IDirect3DDevice9* device, D3DRENDER
         return originalSetRenderState(device,state,depthMask.effective());
     }
     HRESULT result=originalSetRenderState(device,state,value);
-    if(state!=D3DRS_ALPHABLENDENABLE||FAILED(result))
+    if(FAILED(result))
         return result;
-    depthMask.blending=value!=FALSE;
+    if(state==D3DRS_ALPHABLENDENABLE)
+        depthMask.blending=value!=FALSE;
+    else if(state==D3DRS_ZWRITEENABLE)
+        depthMask.zWriting=value!=FALSE;
+    else
+        return result;
     originalSetRenderState(device,D3DRS_COLORWRITEENABLE1,depthMask.effective());
     return result;
 }
 
 // Hooks SetRenderState of device's class. Returns why it could not, or nullptr.
-// When the device already exists, the mask takes effect at the next change of alpha blending.
+// When the device already exists, the mask takes effect at the next change of blending or Z writing.
 const char* hookSetRenderState(IDirect3DDevice9* device) {
     D3DCAPS9 caps;
     if(FAILED(device->GetDeviceCaps(&caps)))

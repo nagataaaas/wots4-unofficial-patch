@@ -19,7 +19,8 @@ Detailed explanations of each fix (what the problem is, why it happens, the fixe
    - When it gives them back, it writes `returned the player's weapons, items and outfit after Madara's rescue` to `mod_loader.log`.
    - Weapons in a save already made in this state cannot be restored.
 3. Effects such as the glow (bloom) and the effect when you kick someone get a white or black box around them (confirmed in game. [Details](docs/fixes/effect_box.md))
-   - The scene is drawn to two textures at once: the color, and the depth that depth of field (DoF) reads. An effect's square quad changed the depth of its whole rectangle, transparent parts included, so the DoF blur and contrast changed in the shape of the quad. While drawing with alpha blending, this Mod keeps the depth texture unwritten (by hooking `IDirect3DDevice9::SetRenderState`).
+   - The scene is drawn to two textures at once: the color, and the depth that depth of field (DoF) reads. An effect's square quad changed the depth of its whole rectangle, transparent parts included, so the DoF blur and contrast changed in the shape of the quad. While something is drawn with alpha blending and without writing the depth buffer (an effect), this Mod keeps the depth texture unwritten (by hooking `IDirect3DDevice9::SetRenderState`).
+   - The first version used blending alone as the condition, so characters, which are also drawn with blending, became see-through. With this version's narrower condition, the boxes are gone and characters are opaque, confirmed in the game.
    - When it is installed, it writes `translucent depth mask installed` to `mod_loader.log`.
 
 ## Planned

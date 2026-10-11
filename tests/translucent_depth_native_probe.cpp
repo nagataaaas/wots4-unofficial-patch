@@ -115,24 +115,33 @@ int main(int argc, char** argv) {
         *(unsigned char*)&setRenderStateA==0xe9);
     check("installing does not call the device besides GetDeviceCaps",device.calls.empty()&&!device.unexpectedCalls);
 
+    // A character: blended, writes Z.
     setRenderState(device,alphaBlendEnable,TRUE);
-    check("blending on: the game's state, then render target 1 gets no channels",
-        callsAre(device,{{alphaBlendEnable,TRUE},{colorWriteEnable1,0}}));
+    check("blending on with Z writing (a character): render target 1 keeps all channels",
+        callsAre(device,{{alphaBlendEnable,TRUE},{colorWriteEnable1,0xf}}));
+    // An effect: blended, no Z writing.
     setRenderState(device,zWriteEnable,FALSE);
-    check("other states pass through unchanged",callsAre(device,{{zWriteEnable,FALSE}}));
+    check("Z writing off while blending (an effect): render target 1 gets no channels",
+        callsAre(device,{{zWriteEnable,FALSE},{colorWriteEnable1,0}}));
     setRenderState(device,alphaBlendEnable,FALSE);
-    check("blending off: render target 1 gets all channels back",
+    check("blending off without Z writing: render target 1 gets all channels back",
         callsAre(device,{{alphaBlendEnable,FALSE},{colorWriteEnable1,0xf}}));
+    setRenderState(device,zWriteEnable,TRUE);
+    check("Z writing on while opaque: all channels",callsAre(device,{{zWriteEnable,TRUE},{colorWriteEnable1,0xf}}));
+    setRenderState(device,4,1);  // D3DRS_SHADEMODE
+    check("other states pass through unchanged",callsAre(device,{{4,1}}));
 
     setRenderState(device,colorWriteEnable1,0x7);
     check("a mask the game asks for while opaque is passed on",callsAre(device,{{colorWriteEnable1,0x7}}));
     setRenderState(device,alphaBlendEnable,TRUE);
-    check("blending on hides that mask",callsAre(device,{{alphaBlendEnable,TRUE},{colorWriteEnable1,0}}));
+    setRenderState(device,zWriteEnable,FALSE);
+    check("an effect hides that mask",callsAre(device,{{alphaBlendEnable,TRUE},{colorWriteEnable1,0x7},
+        {zWriteEnable,FALSE},{colorWriteEnable1,0}}));
     setRenderState(device,colorWriteEnable1,0x3);
-    check("a mask asked for while blending stays hidden",callsAre(device,{{colorWriteEnable1,0}}));
-    setRenderState(device,alphaBlendEnable,FALSE);
-    check("blending off restores the last mask the game asked for",
-        callsAre(device,{{alphaBlendEnable,FALSE},{colorWriteEnable1,0x3}}));
+    check("a mask asked for during an effect stays hidden",callsAre(device,{{colorWriteEnable1,0}}));
+    setRenderState(device,zWriteEnable,TRUE);
+    check("Z writing on restores the last mask the game asked for",
+        callsAre(device,{{zWriteEnable,TRUE},{colorWriteEnable1,0x3}}));
     check("no other device method was called",!device.unexpectedCalls);
 
     // A GPU without separate write masks: the mask is skipped, nothing is hooked.
