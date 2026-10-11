@@ -1,5 +1,7 @@
 # bug_fix
 
+[English](README.en.md)
+
 『侍道4』のクラッシュやバグを直す Mod です。
 
 Release にはまだ入れていません。
