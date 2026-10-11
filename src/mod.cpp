@@ -18,6 +18,12 @@
 // IDirect3DDevice9::SetRenderState, or IDirect3D9::CreateDevice to reach it
 // when the device does not exist yet.
 //
+// Physical screen size check: the game is not DPI aware, so on a scaled
+// monitor GetSystemMetrics gives it the scaled size, its "same resolution"
+// check in 0x5383d0 never matches, and every return to the full screen window
+// changes the display mode. While 0x5383d0 runs, the thread uses per-monitor
+// DPI awareness so the check compares physical pixels.
+//
 // Each fix is installed on its own, so a changed game or another Mod's hook
 // on one of them does not stop the others. Each can be turned off in
 // config.ini ([<section>] enabled=0).
@@ -265,6 +271,85 @@ bool installTranslucentDepthMask() {
     return true;
 }
 
+// ---- Physical screen size check
+
+// Changes the display mode to (ebx = width, height) unless the screen already has that size.
+// Called by the full screen setup (0x538180) on every WM_ACTIVATEAPP and by 0x4ddc70.
+constexpr uintptr_t displayModeCheck = 0x5383d0;
+constexpr uint32_t displayModeCheckHookLength = 9;  // push ebp; mov ebp,esp; sub esp,0xa4
+constexpr uintptr_t getSystemMetricsImport = 0x905404;
+// DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE; the SDK defines it only for WINVER >= 0x0605.
+const HANDLE perMonitorDpiAwareness = reinterpret_cast<HANDLE>(-3);
+
+using SetThreadDpiAwarenessContextFunction = HANDLE (WINAPI*)(HANDLE);
+
+// Resolved at runtime: missing before Windows 10 version 1607, where the hook changes nothing.
+SetThreadDpiAwarenessContextFunction setThreadDpiAwarenessContext;
+HANDLE dpiAwarenessBeforeCheck;
+void* originalDisplayModeCheck;
+
+bool displayModeCheckCodeMatches() {
+    const unsigned char prologue[] = {0x55,0x8b,0xec,0x81,0xec,0xa4,0x00,0x00,0x00};
+    const unsigned char loadMetrics[] = {0x8b,0x35};  // mov esi,[GetSystemMetrics]
+    // cmp ebx,edi; jne; cmp [ebp+0xc],eax; je (the screen size check)
+    const unsigned char compare[] = {0x3b,0xdf,0x75,0x05,0x39,0x45,0x0c,0x74,0x7f};
+    return same(displayModeCheck,prologue,sizeof(prologue)) && same(0x5383e7,loadMetrics,sizeof(loadMetrics)) &&
+        readGamePointer(0x5383e9)==va(getSystemMetricsImport) && same(0x5383fe,compare,sizeof(compare));
+}
+
+// Runs once or twice each time the window is activated, not every frame, so it may log.
+void __cdecl usePhysicalPixels(int wantedWidth, int wantedHeight) {
+    if(!setThreadDpiAwarenessContext)
+        return;
+    dpiAwarenessBeforeCheck=setThreadDpiAwarenessContext(perMonitorDpiAwareness);
+    if(!host->log)
+        return;
+    // Through the game's import, so the log shows what the game's check sees.
+    auto getSystemMetrics=reinterpret_cast<int (WINAPI*)(int)>(readGamePointer(getSystemMetricsImport));
+    char line[200];
+    int screenWidth=getSystemMetrics(SM_CXSCREEN);
+    int screenHeight=getSystemMetrics(SM_CYSCREEN);
+    sprintf_s(line,"display mode check: the game wants %dx%d, the primary screen is %dx%d (physical pixels); %s",
+        wantedWidth,wantedHeight,screenWidth,screenHeight,
+        wantedWidth==screenWidth&&wantedHeight==screenHeight?"no display mode change":"the game changes the display mode");
+    log(line);
+}
+
+void __cdecl restoreDpiAwareness() {
+    if(!dpiAwarenessBeforeCheck)
+        return;
+    setThreadDpiAwarenessContext(dpiAwarenessBeforeCheck);
+    dpiAwarenessBeforeCheck=nullptr;
+}
+
+// 0x5383d0 takes the width in ebx and (window, height) on the stack, returns al and pops 8 bytes.
+// The C++ calls in between keep ebx, so the original gets the same arguments.
+__declspec(naked) void displayModeCheckHook() {
+    __asm {
+        push dword ptr [esp+8]
+        push ebx
+        call usePhysicalPixels
+        add esp, 8
+        push dword ptr [esp+8]
+        push dword ptr [esp+8]
+        call dword ptr [originalDisplayModeCheck]
+        push eax
+        call restoreDpiAwareness
+        pop eax
+        ret 8
+    }
+}
+
+void resolveSetThreadDpiAwarenessContext() {
+    auto user32=GetModuleHandleW(L"user32.dll");
+    if(user32)
+        setThreadDpiAwarenessContext=reinterpret_cast<SetThreadDpiAwarenessContextFunction>(
+            GetProcAddress(user32,"SetThreadDpiAwarenessContext"));
+    if(!setThreadDpiAwarenessContext)
+        log("physical screen size check does nothing: SetThreadDpiAwarenessContext is missing "
+            "(Windows older than 10 version 1607)");
+}
+
 // ---- Installation
 
 // ---- Settings
@@ -312,6 +397,9 @@ Fix fixes[] = {
     {L"property_return","property return after Madara's rescue",setNextScript,setNextScriptHookLength,
         reinterpret_cast<void*>(&setNextScriptHook),reinterpret_cast<void**>(&originalSetNextScript),
         propertyReturnCodeMatches,false},
+    {L"physical_screen_check","physical screen size check",displayModeCheck,displayModeCheckHookLength,
+        reinterpret_cast<void*>(&displayModeCheckHook),&originalDisplayModeCheck,
+        displayModeCheckCodeMatches,false},
 };
 
 // Checks the setting and the code, and reserves the hook range. Logs why a fix is skipped.
@@ -380,6 +468,7 @@ extern "C" BOOL WINAPI ModInitialize(const wots4::ModContext* context) {
         log("the path of config.ini is too long; nothing changed");
         return FALSE;
     }
+    resolveSetThreadDpiAwarenessContext();
     bool anySelected=false;
     for(auto& fix:fixes)
         anySelected|=fix.selected=select(fix);

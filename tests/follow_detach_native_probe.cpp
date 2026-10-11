@@ -107,14 +107,15 @@ int main(int argc, char** argv) {
     auto joint=(unsigned char*)va(0x56590e);
     auto setTaken=(unsigned char*)va(0x553f50);
     auto deviceOffset=(unsigned char*)va(0x88e10b);  // 0x2238 in mov eax,[eax+0x2238]
-    joint[3]=0x4c; setTaken[6]=2; deviceOffset[0]=0x3c;
+    auto screenCompare=(unsigned char*)va(0x5383fe);  // cmp ebx,edi of the screen size check
+    joint[3]=0x4c; setTaken[6]=2; deviceOffset[0]=0x3c; screenCompare[1]=0xde;
     check("an unknown exe is refused without changes",
         !initialize(&context)&&claims.empty()&&!memcmp((void*)va(0x48d520),original,sizeof(original)));
-    joint[3]=0x48; setTaken[6]=1; deviceOffset[0]=0x38;
+    joint[3]=0x48; setTaken[6]=1; deviceOffset[0]=0x38; screenCompare[1]=0xdf;
 
     check("the Mod initializes on the known exe",initialize(&context)!=FALSE);
-    check("the Mod claims 5 bytes at 0x48d520 and 5 at 0x55e140",
-        claims.size()==2&&claimed(0x48d520,5)&&claimed(0x55e140,5)&&releases==0);
+    check("the Mod claims 5 bytes at 0x48d520, 5 at 0x55e140 and 9 at 0x5383d0",
+        claims.size()==3&&claimed(0x48d520,5)&&claimed(0x55e140,5)&&claimed(0x5383d0,9)&&releases==0);
     check("the hook is written at 0x48d520",*(unsigned char*)va(0x48d520)==0xe9);
     check("both fixes are logged as installed",
         loggedText("follow-effect detach installed at 0x48d520")&&

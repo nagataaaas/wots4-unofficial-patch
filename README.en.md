@@ -22,11 +22,16 @@ Detailed explanations of each fix (what the problem is, why it happens, the fixe
    - The scene is drawn to two textures at once: the color, and the depth that depth of field (DoF) reads. An effect's square quad changed the depth of its whole rectangle, transparent parts included, so the DoF blur and contrast changed in the shape of the quad. While something is drawn with alpha blending and without writing the depth buffer (an effect), this Mod keeps the depth texture unwritten (by hooking `IDirect3DDevice9::SetRenderState`).
    - The first version used blending alone as the condition, so characters, which are also drawn with blending, became see-through. With this version's narrower condition, the boxes are gone and characters are opaque, confirmed in the game.
    - When it is installed, it writes `translucent depth mask installed` to `mod_loader.log`.
+4. In full screen, the screen turns white and freezes for a moment every time you return to the window (partly implemented, confirmed in game that returning is much faster. [Details](docs/fixes/focus_white_screen.md))
+   - The game is not DPI aware, so when Windows scaling is not 100%, it gets the screen size before scaling (3072x1728 for 3840x2160 at 125%). Its "the screen already has the wanted resolution, do not change it" check never matched, so it changed the resolution every time you returned. While that check runs (`0x5383d0`), this Mod makes it see the screen size in physical pixels.
+   - The device reset and the white background are not changed yet (planned).
+   - Each time you return, it writes `display mode check: ...` to `mod_loader.log`.
 
 ## Planned
 
-1. Other crashes (the screen turns white and freezes when you return to the window, etc.)
-2. Other display bugs
+1. The rest of the white screen and freeze when returning to the window (skip the needless device reset, do not paint the background white)
+2. Other crashes
+3. Other display bugs
 
 ## Settings (config.ini)
 
@@ -37,6 +42,7 @@ Detailed explanations of each fix (what the problem is, why it happens, the fixe
 | `[follow_detach]` | 1. Crash at the ending after resuming from the photographer in the jail |
 | `[property_return]` | 2. Property not given back after Madara's rescue |
 | `[translucent_depth]` | 3. White or black boxes around effects |
+| `[physical_screen_check]` | 4. White screen and freeze on returning to the window (resolution check) |
 
 A fix that is not installed is written to `mod_loader.log` as `[<fix name>] disabled in config.ini`. A value other than `1` or `0` is treated as `1`, and the log says so. The settings are read when the game starts.
 

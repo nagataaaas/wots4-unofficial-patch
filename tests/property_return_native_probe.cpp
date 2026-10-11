@@ -57,7 +57,8 @@ int main(int argc, char** argv) {
     auto joint=(unsigned char*)va(0x56590e);
     joint[3]=0x4c;
     check("with the follow-effect detach code changed, the Mod still initializes",initialize(&context)!=FALSE);
-    check("only 0x55e140 is claimed (5 bytes)",claims.size()==1&&claimed(0x55e140,5)&&releases==0);
+    check("0x55e140 is claimed (5 bytes) and 0x48d520 is not",
+        claimed(0x55e140,5)&&!claimed(0x48d520,5)&&releases==0);
     check("0x48d520 is left unchanged",!memcmp((void*)va(0x48d520),originalRelease,sizeof(originalRelease)));
     check("the skipped fix is logged with the reason",
         loggedText("follow-effect detach skipped: the game code at 0x48d520 is not the known version"));

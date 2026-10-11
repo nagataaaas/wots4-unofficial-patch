@@ -34,16 +34,20 @@ int main(int argc, char** argv) {
     check("mod.dll exports Wots4ModInitialize",initialize!=nullptr);
     if(!initialize) { printf("RESULT tests=%u failures=%u\n",tests,failures+1); return 1; }
 
-    writeConfig("[follow_detach]\r\nenabled=0\r\n[property_return]\r\nenabled=0\r\n[translucent_depth]\r\nenabled=0\r\n");
+    writeConfig("[follow_detach]\r\nenabled=0\r\n[property_return]\r\nenabled=0\r\n[translucent_depth]\r\nenabled=0\r\n"
+        "[physical_screen_check]\r\nenabled=0\r\n");
     check("every fix disabled: the Mod refuses to load",!initialize(&context));
     check("every fix disabled: nothing is claimed or written",
         claims.empty()&&!memcmp((void*)va(0x48d520),originalRelease,sizeof(originalRelease)));
     check("every disabled fix is logged",loggedText("[follow_detach] disabled in config.ini (enabled=0); not installed")&&
-        loggedText("[property_return] disabled in config.ini")&&loggedText("[translucent_depth] disabled in config.ini"));
+        loggedText("[property_return] disabled in config.ini")&&loggedText("[translucent_depth] disabled in config.ini")&&
+        loggedText("[physical_screen_check] disabled in config.ini"));
+    check("the display mode check is left unchanged",*(unsigned char*)va(0x5383d0)==0x55);
     check("the depth mask is not set up when disabled",!loggedText("translucent depth mask"));
 
     logged.clear();
-    writeConfig("[follow_detach]\r\nenabled=0\r\n[property_return]\r\nenabled=yes\r\n[translucent_depth]\r\nenabled=0\r\n");
+    writeConfig("[follow_detach]\r\nenabled=0\r\n[property_return]\r\nenabled=yes\r\n[translucent_depth]\r\nenabled=0\r\n"
+        "[physical_screen_check]\r\nenabled=0\r\n");
     check("one fix enabled: the Mod initializes",initialize(&context)!=FALSE);
     check("only the enabled fix is claimed (0x55e140)",claims.size()==1&&claimed(0x55e140,5));
     check("the disabled fix leaves 0x48d520 unchanged",

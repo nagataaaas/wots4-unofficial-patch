@@ -60,4 +60,10 @@ if(WOTS4_BUILD_TESTS)
         LINK_OPTIONS /BASE:0x10000000 /DYNAMICBASE
         ARGS ${unpacked_native} $<TARGET_FILE:mod_bug_fix> NEEDS_EXE)
     add_dependencies(config_native_probe mod_bug_fix)
+    # Loads mod.dll into a copy of the exe and runs the game's display mode check with fake
+    # GetSystemMetrics and ChangeDisplaySettingsA (the display mode is not changed)
+    wots4_add_probe(display_mode_check_native_probe SOURCES tests/display_mode_check_native_probe.cpp
+        LINK_OPTIONS /BASE:0x10000000 /DYNAMICBASE
+        ARGS ${unpacked_native} $<TARGET_FILE:mod_bug_fix> NEEDS_EXE)
+    add_dependencies(display_mode_check_native_probe mod_bug_fix)
 endif()
