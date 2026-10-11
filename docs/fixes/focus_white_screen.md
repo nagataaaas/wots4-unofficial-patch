@@ -55,7 +55,7 @@ Fix 3, full screen re-apply skip (`[skip_full_screen_reapply]`):
 - At startup the Mod checks the bytes at `0x538180` (prologue), `0x53818e`/`0x538193` (the settings' size), `0x53819b` (the full screen flag) and `0x5381c9` (the window handle).
 - `mod_loader.log` gets, on each activation, `full screen re-apply skipped: the display is already 3840x2160 and the window covers it`, or `full screen applied again: <reason>`.
 - Verified without the game: on a mapped copy of the exe with fake window, display mode and renderer calls and a hidden test window, activation runs the renderer setup and window calls without the Mod and nothing with the Mod; a window larger than the screen, other settings, entering full screen from windowed mode, and switching to windowed mode still run the game's code.
-- Confirmed in game (2026-10-12): the white flash is gone. Still to check: whether the picture spreading past the display and the remaining freeze are gone; that the game still recovers after the lock screen (Win+L) or a display change while it is in the background; that Alt+Enter still switches modes.
+- Confirmed in game (2026-10-12): the white flash, the picture spreading past the display and the remaining freeze are gone, and the game recovers after the lock screen (Win+L). Not checked separately: a display change while the game is in the background, and Alt+Enter.
 
 Fix 4, no white background (`[no_white_background]`):
 
