@@ -1,9 +1,8 @@
 // Installs mod.dll on a copy of the exe mapped into this process and runs the
-// hooked end of the play session (0x4e18e0). Its body needs the running game,
-// so on the copy, after installation, the code right after the part MinHook
-// moves jumps to the game's own last lines (0x4e2070): they clear the handled
-// mark of the night visit progress and return. Never attaches to the game
-// process or reads saves.
+// hooked copy of save data into the game state (0x4d9f50). Its body needs the
+// running game, so on the copy, after installation, the code right after the
+// part MinHook moves jumps to the game's own last lines (0x4da125: pop the
+// saved registers, ret 0xc). Never attaches to the game process or reads saves.
 #include <cstdlib>
 #include "mapped_exe.h"
 
@@ -13,6 +12,8 @@ constexpr unsigned yobaiProgressGlobal = 0x9ecbb8;
 constexpr unsigned progressSize = 0x44;
 constexpr unsigned resultOffset = 0x9;
 constexpr unsigned handledOffset = 0xa;
+constexpr unsigned fromFile = 1;       // Loading a save file (0x53eae9)
+constexpr unsigned fromSnapshot = 0;   // Retry after death (0x4e91b6)
 static unsigned char* progress;
 
 static void writeJump(unsigned from, unsigned to) {
@@ -21,9 +22,9 @@ static void writeJump(unsigned from, unsigned to) {
     *(int*)(code+1)=(int)(va(to)-(va(from)+5));
 }
 
-static void endPlaySession() {
-    auto function=(void (__stdcall*)(void*))va(0x4e18e0);
-    function(nullptr);
+static void loadSaveData(unsigned source) {
+    auto function=(void (__stdcall*)(void*, const void*, unsigned))va(0x4d9f50);
+    function(nullptr,nullptr,source);
 }
 
 static void setProgress(signed char result, unsigned char handled) {
@@ -51,51 +52,59 @@ int main(int argc, char** argv) {
 
     // Without the Mod: the game's prologue and its last lines, from a copy outside the exe image.
     auto unmodded=(unsigned char*)VirtualAlloc(nullptr,0x20,MEM_RESERVE|MEM_COMMIT,PAGE_EXECUTE_READWRITE);
-    const unsigned char unmoddedBody[]={0x55,0x8b,0xec,0x83,0xe4,0xf8,0x53,0x56,0x57,0xe9};
+    const unsigned char unmoddedBody[]={0x55,0x8b,0xec,0x53,0x56,0x57,0xe9};
     memcpy(unmodded,unmoddedBody,sizeof(unmoddedBody));
-    *(int*)(unmodded+sizeof(unmoddedBody))=(int)(va(0x4e2070)-((unsigned)unmodded+sizeof(unmoddedBody)+4));
-    setProgress(0,1);
-    ((void (__stdcall*)(void*))unmodded)(nullptr);
-    check("without the Mod the handled result 0 stays after the session ends (the bug)",progressIs(0,0));
+    *(int*)(unmodded+sizeof(unmoddedBody))=(int)(va(0x4da125)-((unsigned)unmodded+sizeof(unmoddedBody)+4));
+    setProgress(0,0);
+    ((void (__stdcall*)(void*, const void*, unsigned))unmodded)(nullptr,nullptr,fromFile);
+    check("without the Mod the result 0 stays after a save file is loaded (the bug)",progressIs(0,0));
 
     // Only the follow-effect detach code differs: the night visit result reset is still installed.
     auto joint=(unsigned char*)va(0x56590e);
     joint[3]=0x4c;
     check("with the follow-effect detach code changed, the Mod still initializes",initialize(&context)!=FALSE);
-    check("0x4e18e0 is claimed (6 bytes) and 0x48d520 is not",
-        claimed(0x4e18e0,6)&&!claimed(0x48d520,5)&&releases==0);
-    check("the fix is logged as installed",loggedText("night visit result reset installed at 0x4e18e0"));
-    check("the hook is written at 0x4e18e0",*(unsigned char*)va(0x4e18e0)==0xe9);
+    check("0x4d9f50 is claimed (5 bytes) and neither 0x48d520 nor 0x4e18e0 is",
+        claimed(0x4d9f50,5)&&!claimed(0x48d520,5)&&!claimed(0x4e18e0,6)&&releases==0);
+    check("the fix is logged as installed",loggedText("night visit result reset installed at 0x4d9f50"));
+    check("the hook is written at 0x4d9f50",*(unsigned char*)va(0x4d9f50)==0xe9);
+    check("the end of the play session is left unchanged",*(unsigned char*)va(0x4e18e0)==0x55);
     joint[3]=0x48;
 
-    // push ebx; push esi; push edi (as the game's body does), then the game's last lines at 0x4e2070:
-    // mov ecx,[0x9ecbb8]; mov byte [ecx+0xa],0; pop edi; pop esi; pop ebx; mov esp,ebp; pop ebp; ret 4
-    const unsigned char saveRegisters[]={0x53,0x56,0x57};
-    memcpy((void*)va(0x4e18e6),saveRegisters,sizeof(saveRegisters));
-    writeJump(0x4e18e9,0x4e2070);
+    // MinHook moved push ebp; mov ebp,esp; push ebx; push esi. Keep push edi (0x4d9f55), then the
+    // game's last lines at 0x4da125: pop edi; pop esi; pop ebx; pop ebp; ret 0xc.
+    writeJump(0x4d9f56,0x4da125);
 
-    setProgress(0,1);
-    endPlaySession();
-    check("handled success (0) at the end of the session: result -1, mark 0",progressIs(-1,0));
+    // The ending of the 0x4e18e0 session leaves the result with a cleared mark (0x4e2076).
+    setProgress(0,0);
+    loadSaveData(fromSnapshot);
+    check("retry after death (snapshot) keeps the result 0, so its reward is handed out",progressIs(0,0));
+    setProgress(3,0);
+    loadSaveData(fromSnapshot);
+    check("retry after death keeps the failure (3) too",progressIs(3,0));
+
+    setProgress(0,0);
+    loadSaveData(fromFile);
+    check("loading a save file: result 0 becomes -1, mark 0",progressIs(-1,0));
     check("the discarded result is logged",
-        loggedText("discarded the night visit result 0 left from the play session that ended"));
-
+        loggedText("discarded the night visit result 0 left in memory while loading a save file"));
     setProgress(3,1);
-    endPlaySession();
-    check("handled failure (3): result -1, mark 0",progressIs(-1,0));
+    loadSaveData(fromFile);
+    check("loading a save file: handled failure (3) becomes -1, mark 0",progressIs(-1,0));
+    setProgress(2,0);
+    loadSaveData(0x100|fromFile);
+    check("only the low byte of the argument is read, as the game does",progressIs(-1,0));
     setProgress(1,0);
-    endPlaySession();
-    check("consolation (1) not handed out yet: result -1, mark 0",progressIs(-1,0));
+    loadSaveData(0x100);
+    check("an argument with a zero low byte is a snapshot: the result stays",progressIs(1,0));
 
     size_t loggedBefore=logged.size();
-    setProgress(-1,1);
-    endPlaySession();
-    check("no result: the game's own clear of the mark still runs",progressIs(-1,0));
-    check("no result: nothing is logged",logged.size()==loggedBefore);
+    setProgress(-1,0);
+    loadSaveData(fromFile);
+    check("no result: nothing changes and nothing is logged",progressIs(-1,0)&&logged.size()==loggedBefore);
 
     // The caller's registers survive the hook and the game's code.
     unsigned ebxAfter=0, esiAfter=0, ediAfter=0;
-    auto function=va(0x4e18e0);
+    auto function=va(0x4d9f50);
     __asm {
         push ebx
         push esi
@@ -103,6 +112,8 @@ int main(int argc, char** argv) {
         mov ebx, 0x11111111
         mov esi, 0x22222222
         mov edi, 0x33333333
+        push 1
+        push 0
         push 0
         call function
         mov ebxAfter, ebx
@@ -112,7 +123,7 @@ int main(int argc, char** argv) {
         pop esi
         pop ebx
     }
-    check("ebx, esi and edi are kept for the caller",
+    check("ebx, esi and edi are kept for the caller, and the 3 arguments are popped",
         ebxAfter==0x11111111&&esiAfter==0x22222222&&ediAfter==0x33333333);
 
     printf("RESULT tests=%u failures=%u; mapped exe copy in this process only\n",tests,failures);

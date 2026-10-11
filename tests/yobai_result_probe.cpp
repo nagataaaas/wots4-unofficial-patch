@@ -38,7 +38,8 @@ int main() {
     using bug_fix::discardYobaiResult;
     unsigned char progress[progressSize];
 
-    // What the reported bug leaves: the result was handed out, then the player returned to the title.
+    // What the reported bug leaves when a save file is loaded: the result was handed out, then the
+    // player returned to the title.
     const signed char handledResults[]={0,1,2,3};
     for(auto result:handledResults) {
         makeProgress(progress,result,1);
@@ -50,7 +51,7 @@ int main() {
     discardYobaiResult(progress);
     check("only the result and the handled mark change",othersUntouched(progress));
 
-    // A visit that ended but whose result was not handed out yet also belongs to the ended session.
+    // A visit whose result was not handed out yet does not belong to a loaded save file either.
     makeProgress(progress,1,0);
     check("result not handed out yet: discarded too",discardYobaiResult(progress)==1&&isCleared(progress));
 

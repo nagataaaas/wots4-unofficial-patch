@@ -34,10 +34,12 @@
 // WM_ERASEBKGND itself, so a repaint keeps the last frame instead of the
 // window class's white brush.
 //
-// Night visit result reset: after the game ends a play session (0x4e18e0, used
-// by "Return to title"), set the result of the last night visit back to "none",
-// as saving does. Otherwise a save that still has a promise hands out the old
-// reward and loses the promise at the first map change after loading.
+// Night visit result reset: when a save file is loaded (0x4d9f50 with its
+// "from a file" argument set), set the result of the last night visit back to
+// "none", as saving does. Otherwise a save that still has a promise hands out
+// the old reward and loses the promise at the first map change after loading.
+// Retry after death restores the in-memory snapshot (same function, argument 0)
+// and keeps the result, as the game does, so that visit's reward is handed out.
 //
 // Each fix is installed on its own, so a changed game or another Mod's hook
 // on one of them does not stop the others. Each can be turned off in
@@ -492,44 +494,56 @@ LRESULT CALLBACK windowProcedureHook(HWND window, UINT message, WPARAM wParam, L
 
 // ---- Night visit result reset
 
-// Ends the play session (GameParamManager.cpp assert on gameEndStatus). __stdcall with the game
-// task as its only argument, ret 4; reads no register arguments. Called by the dialog callback
-// 0x4e0830 (result -1) and by the task update 0x4e1300 (0x4e171b), not every frame.
-constexpr uintptr_t endPlaySession = 0x4e18e0;
-constexpr uint32_t endPlaySessionHookLength = 6;  // push ebp; mov ebp,esp; and esp,-8
+// Copies save data into the game state (SaveDataWin32Manager.cpp). __stdcall (game state, save data,
+// from a file), ret 0xc; reads no register arguments. Loading a save file calls it with 1 (0x53eae9,
+// the data read into [0x9ecf9c]); retry after death with 0 (0x4e91b6, the snapshot [0x9ecfa8] taken
+// at the last map exit by 0x53e3e0). Not called every frame.
+constexpr uintptr_t loadSaveData = 0x4d9f50;
+constexpr uint32_t loadSaveDataHookLength = 5;  // push ebp; mov ebp,esp; push ebx; push esi
 constexpr uintptr_t yobaiProgress = 0x9ecbb8;
+constexpr uintptr_t fileSaveData = 0x9ecf9c;
+constexpr uintptr_t retrySnapshot = 0x9ecfa8;
 
-void (__stdcall* originalEndPlaySession)(void* task);
+uintptr_t (__stdcall* originalLoadSaveData)(void* gameState, const void* saveData, uint32_t fromFile);
 
 bool yobaiResultCodeMatches() {
-    const unsigned char prologue[] = {0x55,0x8b,0xec,0x83,0xe4,0xf8,0x51,0xd9,0xee};
-    // mov ecx,[0x9ecbb8]; mov byte [ecx+0xa],0 (the end of 0x4e18e0, both exits)
-    const unsigned char clearHandled[] = {0x8b,0x0d,0,0,0,0,0xc6,0x41,0x0a,0x00};
-    const unsigned char clearHandledOther[] = {0x8b,0x15,0,0,0,0,0x5f,0x5e,0xc6,0x42,0x0a,0x00};
+    const unsigned char prologue[] = {0x55,0x8b,0xec,0x53,0x56,0x57,0x8b,0x7d,0x08};
+    const unsigned char readFromFile[] = {0x80,0x7d,0x10,0x00};  // cmp byte [ebp+0x10],0 (file tail)
+    // mov ecx,[0x9ecf9c]; mov edx,[0x9e967c]; push 1; push ecx; push edx; call 0x4d9f50
+    const unsigned char loadFile[] = {0x8b,0x0d,0,0,0,0,0x8b,0x15,0,0,0,0,0x6a,0x01,0x51,0x52,0xe8};
+    // push 0; push edx (the snapshot, read at 0x4e918e: mov edx,[0x9ecfa8]); push edi
+    const unsigned char loadRetrySnapshot[] = {0x6a,0x00,0x52,0x57};
+    const unsigned char readSnapshot[] = {0x8b,0x15};
     const unsigned char readResult[] = {0x0f,0xbe,0x47,0x09};               // movsx eax,byte [edi+9] (0x6a0560)
     const unsigned char markHandled[] = {0x66,0xc7,0x47,0x0a,0x01,0x00};    // mov word [edi+0xa],1
     // mov byte [eax+9],-1; mov byte [eax+0xa],0 (after saving)
     const unsigned char clearOnSave[] = {0xc6,0x40,0x09,0xff,0xc6,0x40,0x0a,0x00};
-    return same(endPlaySession,prologue,sizeof(prologue)) &&
-        same(0x4e2070,clearHandled,2) && same(0x4e2076,clearHandled+6,4) &&
-        readGamePointer(0x4e2072)==va(yobaiProgress) &&
-        same(0x4e2083,clearHandledOther,2) && same(0x4e2089,clearHandledOther+6,6) &&
-        readGamePointer(0x4e2085)==va(yobaiProgress) &&
+    return same(loadSaveData,prologue,sizeof(prologue)) && same(0x4d9f8b,readFromFile,sizeof(readFromFile)) &&
+        same(0x53eadd,loadFile,2) && readGamePointer(0x53eadf)==va(fileSaveData) &&
+        same(0x53eae3,loadFile+6,2) && readGamePointer(0x53eae5)==va(gameState) &&
+        same(0x53eae9,loadFile+12,sizeof(loadFile)-12) &&
+        static_cast<uintptr_t>(0x53eaf2+*reinterpret_cast<const int32_t*>(va(0x53eaee)))==loadSaveData &&
+        same(0x4e91b6,loadRetrySnapshot,sizeof(loadRetrySnapshot)) &&
+        same(0x4e918e,readSnapshot,sizeof(readSnapshot)) && readGamePointer(0x4e9190)==va(retrySnapshot) &&
         same(0x6a05f3,readResult,sizeof(readResult)) && same(0x6a06c4,markHandled,sizeof(markHandled)) &&
         same(0x53e43a,clearOnSave,sizeof(clearOnSave)) && readGamePointer(0x53e42c)==va(yobaiProgress);
 }
 
-// Runs once per play session, so it may log.
-void __stdcall endPlaySessionHook(void* task) {
-    originalEndPlaySession(task);
+// Runs once per load or retry, so it may log.
+uintptr_t __stdcall loadSaveDataHook(void* gameState, const void* saveData, uint32_t fromFile) {
+    auto returned=originalLoadSaveData(gameState,saveData,fromFile);
+    // The game tests only the low byte (0x4d9f8b).
+    if(!(fromFile&0xff))
+        return returned;
     auto progress=reinterpret_cast<uint8_t*>(readGamePointer(yobaiProgress));
     auto discarded=bug_fix::discardYobaiResult(progress);
     if(discarded==bug_fix::noYobaiResult)
-        return;
+        return returned;
     char line[160];
-    sprintf_s(line,"discarded the night visit result %d left from the play session that ended; "
-        "a loaded promise is no longer used up by it",discarded);
+    sprintf_s(line,"discarded the night visit result %d left in memory while loading a save file; "
+        "the loaded promise is no longer used up by it",discarded);
     log(line);
+    return returned;
 }
 
 // ---- Settings
@@ -586,8 +600,8 @@ Fix fixes[] = {
     {L"no_white_background","no white background",windowProcedure,windowProcedureHookLength,
         reinterpret_cast<void*>(&windowProcedureHook),reinterpret_cast<void**>(&originalWindowProcedure),
         windowProcedureCodeMatches,false},
-    {L"yobai_result_reset","night visit result reset",endPlaySession,endPlaySessionHookLength,
-        reinterpret_cast<void*>(&endPlaySessionHook),reinterpret_cast<void**>(&originalEndPlaySession),
+    {L"yobai_result_reset","night visit result reset",loadSaveData,loadSaveDataHookLength,
+        reinterpret_cast<void*>(&loadSaveDataHook),reinterpret_cast<void**>(&originalLoadSaveData),
         yobaiResultCodeMatches,false},
 };
 

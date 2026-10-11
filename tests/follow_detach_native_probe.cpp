@@ -120,9 +120,9 @@ int main(int argc, char** argv) {
 
     check("the Mod initializes on the known exe",initialize(&context)!=FALSE);
     check("the Mod claims 5 bytes at 0x48d520, 5 at 0x55e140, 9 at 0x5383d0, 7 at 0x538180, 6 at 0x5384c0 "
-        "and 6 at 0x4e18e0",
+        "and 5 at 0x4d9f50",
         claims.size()==6&&claimed(0x48d520,5)&&claimed(0x55e140,5)&&claimed(0x5383d0,9)&&
-        claimed(0x538180,7)&&claimed(0x5384c0,6)&&claimed(0x4e18e0,6)&&releases==0);
+        claimed(0x538180,7)&&claimed(0x5384c0,6)&&claimed(0x4d9f50,5)&&releases==0);
     check("the hook is written at 0x48d520",*(unsigned char*)va(0x48d520)==0xe9);
     check("both fixes are logged as installed",
         loggedText("follow-effect detach installed at 0x48d520")&&

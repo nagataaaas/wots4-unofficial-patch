@@ -47,7 +47,7 @@ int main(int argc, char** argv) {
         loggedText("[no_white_background] disabled in config.ini")&&
         loggedText("[yobai_result_reset] disabled in config.ini"));
     check("the display mode check is left unchanged",*(unsigned char*)va(0x5383d0)==0x55);
-    check("the end of the play session is left unchanged",*(unsigned char*)va(0x4e18e0)==0x55);
+    check("the save data load is left unchanged",*(unsigned char*)va(0x4d9f50)==0x55);
     check("the depth mask is not set up when disabled",!loggedText("translucent depth mask"));
 
     logged.clear();
