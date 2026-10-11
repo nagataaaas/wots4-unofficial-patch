@@ -13,7 +13,8 @@ Detailed explanations of each fix (what the problem is, why it happens, the fixe
 1. The game crashes at the true-route ending (right after defeating Kinugawa) when you resume from the photographer in the jail (confirmed in game. [Details](docs/fixes/jail_ending_crash.md))
    - Effects attached to a character's joints (auras, etc.) kept pointing at the joints after the character's model was freed, and the game crashed when it read a freed joint. When a character's effects are detached (`0x48d520`), this Mod also detaches every effect attached to that model's joints. The detached effects stay where they are.
    - When it detaches effects, it writes `detached N effect(s)` to `mod_loader.log`.
-2. In "The Fighting Spirit Never Dies", when Madara rescues you (save `0x3760` is 1), the confiscated weapons, items and outfit are not given back (needs in-game confirmation. [Details](docs/fixes/madara_rescue_property.md))
+2. In "The Fighting Spirit Never Dies", when Madara rescues you (save `0x3760` is 1), the confiscated weapons, items and outfit are not given back (confirmed in game. [Details](docs/fixes/madara_rescue_property.md))
+   - Normal play never sets this flag to 1; it happens only when the flag is written with a save editor or similar. Strictly speaking, this is less a bug fix than making an unfinished branch consistent with the normal one.
    - The restore (`PlayerGiveProperty`) exists only in the scene after defeating the three sisters, and the rescue branch never called it. The weapons are kept in memory that is not saved, so saving and loading in this state loses them. When the script moves to the scene after the rescue (`BR_14_00_S210`, at `0x55e140`) while the property is still taken, this Mod calls the game's own restore.
    - When it gives them back, it writes `returned the player's weapons, items and outfit after Madara's rescue` to `mod_loader.log`.
    - Weapons in a save already made in this state cannot be restored.

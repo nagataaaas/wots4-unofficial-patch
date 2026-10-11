@@ -5,6 +5,8 @@
 // (save 0x3760 = 1), BR_14_00_S050 goes to S210 instead and nothing gives them
 // back. The weapons wait in an area that is not saved, so they are lost once
 // the game is saved and loaded.
+// Normal play never sets 0x3760 to 1 (only a save editor or similar does), so
+// this makes an unfinished branch consistent rather than fixing a reachable bug.
 #include <cstdint>
 #include <cstring>
 

@@ -1,9 +1,11 @@
 # Weapons and items are not given back after Madara's rescue
 
-- Status: implemented, needs in-game confirmation
+- Status: confirmed in game (reported 2026-10-12)
 - Code: `src/mod.cpp` (`setNextScriptHook`, `propertyReturnCodeMatches`), `src/property_return.h` (`shouldReturnProperty`), hook at `0x55e140`
 - Tests: `property_return_probe` (11 passed, 0 failed), `property_return_native_probe` (15 passed, 0 failed, label `needs_exe`)
 - Last updated: 2026-10-12
+
+> **Note:** Normal play never sets the flag that makes Madara help the player (save `0x3760`). The game only resets it to 0, and no known scene sets it to 1. This branch is reached only when the flag is written by other means, such as a save editor. So this is less a bug fix than making an unfinished branch of the game consistent with the normal one.
 
 ## Problem
 
@@ -11,7 +13,7 @@ On the true route, in "The Fighting Spirit Never Dies", the three sisters captur
 
 Usually the player is tortured three times, fights the sisters unarmed, and after the fight Kogure hands the gear back.
 
-When the save flag at `0x3760` is 1, Madara rescues the player instead and the torture and the fight are skipped. On this branch nothing hands the gear back: the player goes on to "Rescuing Laura" without weapons or items and in the torture outfit.
+When the save flag at `0x3760` is 1, Madara rescues the player instead and the torture and the fight are skipped. Normal play never sets this flag to 1 (see the note above), so you only see this branch with a save whose flag was edited. On this branch nothing hands the gear back: the player goes on to "Rescuing Laura" without weapons or items and in the torture outfit.
 
 The taken weapons are kept in memory that is not saved. If you save and load the game in this state, those weapons are lost for good.
 
@@ -20,6 +22,7 @@ The taken weapons are kept in memory that is not saved. If you save and load the
 - `BR_14_00` calls the script command `PlayerTakeProperty 0` (`0x554dd0` → `0x553d80`). It moves the 10 weapon slots and the items to a backup, saves the current outfit and switches to the torture outfit, and sets game state `+0x48b9e` to 1 (`0x553f50`). The weapon backup (game state `+0x493d8`) is outside the saved area.
 - Only `PlayerGiveProperty` (`0x554e40` → `0x553f60`) restores them and sets `+0x48b9e` back to 0 (`0x55408e`). In this event, `BR_14_00_S140` (after the fight with the sisters) calls it.
 - At the end of `BR_14_00_S050` (the execution stand scene), the script reads `akemi_proof` (`0x3760`). If it is 1 it goes to `BR_14_00_S210` (meeting Moro and Kogure), otherwise to `S060` and the fight. The `S210` branch never reaches `S140`, and `S210` itself does not call `PlayerGiveProperty`.
+- No script writes 1 to `akemi_proof`; the preparation for the sword tournament only writes 0. The `S210` branch looks like content that was never finished, which is likely why it lacks the restore.
 
 ## Possible fixes
 
@@ -44,7 +47,8 @@ Approach 1.
 - Safety checks at startup: the Mod compares the bytes at `0x55e140`, `0x55e19e`–`0x55e1ab` (with `0x55e19f` pointing at `0x9eb5f8`), `0x553f60`, `0x553f50` and `0x55408e`, and checks that `0x553f7c` points at `0x9e967c`. If anything differs, it skips this fix (other fixes are still installed) and writes `property return after Madara's rescue skipped: the game code at 0x55e140 is not the known version` to `mod_loader.log`. It claims 5 bytes at `0x55e140` through `HostApi::claim`.
 - What the player sees: when the rescue scene ends, the weapons, items and outfit are back, as after the fight on the other branch. The Mod writes `returned the player's weapons, items and outfit after Madara's rescue (BR_14_00_S210)` to `mod_loader.log`. If the game finds no player character, the property stays taken and the Mod writes a line that says so.
 - Verified without starting the game: `property_return_probe` checks the decision on synthetic names and flags. `property_return_native_probe` installs `mod.dll` on a copy of the exe and runs the hooked `SetNextScript`, with the rest of `SetNextScript` and the body of `PlayerGiveProperty` replaced on the copy. It checks that only `S210` with the flag set calls `PlayerGiveProperty`, once, and that the Mod still installs this fix when the other fix's code differs.
-- Needs in-game confirmation: with `0x3760` = 1, that after the rescue the weapons, items and outfit are back, and that the weapons can be used in "Rescuing Laura".
+- Confirmed in game (reported 2026-10-12): with a save edited to `0x3760` = 1, the property is given back after the rescue.
+- It changes nothing in normal play, where the flag stays 0 and the script never goes to `S210`.
 
 ## Notes
 
