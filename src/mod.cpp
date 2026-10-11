@@ -34,6 +34,11 @@
 // WM_ERASEBKGND itself, so a repaint keeps the last frame instead of the
 // window class's white brush.
 //
+// Night visit result reset: after the game ends a play session (0x4e18e0, used
+// by "Return to title"), set the result of the last night visit back to "none",
+// as saving does. Otherwise a save that still has a promise hands out the old
+// reward and loses the promise at the first map change after loading.
+//
 // Each fix is installed on its own, so a changed game or another Mod's hook
 // on one of them does not stop the others. Each can be turned off in
 // config.ini ([<section>] enabled=0).
@@ -47,6 +52,7 @@
 #include "property_return.h"
 #include "translucent_depth.h"
 #include "full_screen_reapply.h"
+#include "yobai_result.h"
 
 namespace {
 
@@ -484,6 +490,48 @@ LRESULT CALLBACK windowProcedureHook(HWND window, UINT message, WPARAM wParam, L
     return originalWindowProcedure(window,message,wParam,lParam);
 }
 
+// ---- Night visit result reset
+
+// Ends the play session (GameParamManager.cpp assert on gameEndStatus). __stdcall with the game
+// task as its only argument, ret 4; reads no register arguments. Called by the dialog callback
+// 0x4e0830 (result -1) and by the task update 0x4e1300 (0x4e171b), not every frame.
+constexpr uintptr_t endPlaySession = 0x4e18e0;
+constexpr uint32_t endPlaySessionHookLength = 6;  // push ebp; mov ebp,esp; and esp,-8
+constexpr uintptr_t yobaiProgress = 0x9ecbb8;
+
+void (__stdcall* originalEndPlaySession)(void* task);
+
+bool yobaiResultCodeMatches() {
+    const unsigned char prologue[] = {0x55,0x8b,0xec,0x83,0xe4,0xf8,0x51,0xd9,0xee};
+    // mov ecx,[0x9ecbb8]; mov byte [ecx+0xa],0 (the end of 0x4e18e0, both exits)
+    const unsigned char clearHandled[] = {0x8b,0x0d,0,0,0,0,0xc6,0x41,0x0a,0x00};
+    const unsigned char clearHandledOther[] = {0x8b,0x15,0,0,0,0,0x5f,0x5e,0xc6,0x42,0x0a,0x00};
+    const unsigned char readResult[] = {0x0f,0xbe,0x47,0x09};               // movsx eax,byte [edi+9] (0x6a0560)
+    const unsigned char markHandled[] = {0x66,0xc7,0x47,0x0a,0x01,0x00};    // mov word [edi+0xa],1
+    // mov byte [eax+9],-1; mov byte [eax+0xa],0 (after saving)
+    const unsigned char clearOnSave[] = {0xc6,0x40,0x09,0xff,0xc6,0x40,0x0a,0x00};
+    return same(endPlaySession,prologue,sizeof(prologue)) &&
+        same(0x4e2070,clearHandled,2) && same(0x4e2076,clearHandled+6,4) &&
+        readGamePointer(0x4e2072)==va(yobaiProgress) &&
+        same(0x4e2083,clearHandledOther,2) && same(0x4e2089,clearHandledOther+6,6) &&
+        readGamePointer(0x4e2085)==va(yobaiProgress) &&
+        same(0x6a05f3,readResult,sizeof(readResult)) && same(0x6a06c4,markHandled,sizeof(markHandled)) &&
+        same(0x53e43a,clearOnSave,sizeof(clearOnSave)) && readGamePointer(0x53e42c)==va(yobaiProgress);
+}
+
+// Runs once per play session, so it may log.
+void __stdcall endPlaySessionHook(void* task) {
+    originalEndPlaySession(task);
+    auto progress=reinterpret_cast<uint8_t*>(readGamePointer(yobaiProgress));
+    auto discarded=bug_fix::discardYobaiResult(progress);
+    if(discarded==bug_fix::noYobaiResult)
+        return;
+    char line[160];
+    sprintf_s(line,"discarded the night visit result %d left from the play session that ended; "
+        "a loaded promise is no longer used up by it",discarded);
+    log(line);
+}
+
 // ---- Settings
 
 wchar_t configPath[1024];  // mods\bug_fix\config.ini
@@ -538,6 +586,9 @@ Fix fixes[] = {
     {L"no_white_background","no white background",windowProcedure,windowProcedureHookLength,
         reinterpret_cast<void*>(&windowProcedureHook),reinterpret_cast<void**>(&originalWindowProcedure),
         windowProcedureCodeMatches,false},
+    {L"yobai_result_reset","night visit result reset",endPlaySession,endPlaySessionHookLength,
+        reinterpret_cast<void*>(&endPlaySessionHook),reinterpret_cast<void**>(&originalEndPlaySession),
+        yobaiResultCodeMatches,false},
 };
 
 // Checks the setting and the code, and reserves the hook range. Logs why a fix is skipped.

@@ -27,6 +27,9 @@ Detailed explanations of each fix (what the problem is, why it happens, the fixe
    - The game also applied full screen again every time you returned (`0x538180`): it made the window larger than the screen before fixing it, and reset the render device. When neither the resolution nor the window changed, this Mod skips that. A device that was really lost is still recovered by the game's renderer at the next frame.
    - Each time you return, it writes `display mode check: ...` and `full screen re-apply skipped: ...` (or `full screen applied again: <reason>`) to `mod_loader.log`.
    - As a safety net, this Mod also stops painting the window background white (confirmed in game). The game's window has a white background, and when it was repainted while full screen had to be applied again (a resolution in the settings that differs from the screen, Alt+Enter and so on) it showed white. This Mod answers the request to paint the background (`WM_ERASEBKGND`) without painting, so the last frame stays (`0x5384c0`).
+5. After a night visit (yobai), returning to the title without saving and loading a save with a night visit promise drops the old reward ("token of love" or "consolation gift") again and loses the promise (needs in-game confirmation. [Details](docs/fixes/yobai_result_after_title.md))
+   - The game keeps the result of the last night visit after handing it out, and clears it only when you save. Returning to the title cleared only the "handed out" mark, so the first map change after loading handed the old result out again. When the game ends the play session (`0x4e18e0`), this Mod clears the result as well, as saving does.
+   - When it clears a result, it writes `discarded the night visit result N` to `mod_loader.log`.
 
 ## Planned
 
@@ -45,6 +48,7 @@ Detailed explanations of each fix (what the problem is, why it happens, the fixe
 | `[physical_screen_check]` | 4. White screen and freeze on returning to the window (resolution check) |
 | `[skip_full_screen_reapply]` | 4. White screen and freeze on returning to the window (skip applying full screen again) |
 | `[no_white_background]` | 4. White screen and freeze on returning to the window (no white background) |
+| `[yobai_result_reset]` | 5. Night visit reward handed out again after returning to the title |
 
 A fix that is not installed is written to `mod_loader.log` as `[<fix name>] disabled in config.ini`. A value other than `1` or `0` is treated as `1`, and the log says so. The settings are read when the game starts.
 

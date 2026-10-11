@@ -81,4 +81,13 @@ if(WOTS4_BUILD_TESTS)
         LINK_OPTIONS /BASE:0x10000000 /DYNAMICBASE
         ARGS ${unpacked_native} $<TARGET_FILE:mod_bug_fix> NEEDS_EXE)
     add_dependencies(window_background_native_probe mod_bug_fix)
+    # Checks, with synthetic night visit progress objects, how the left-over result is discarded
+    wots4_add_probe(yobai_result_probe SOURCES tests/yobai_result_probe.cpp
+        INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    # Loads mod.dll into a copy of the exe and ends a play session through the game's own last lines
+    # (the game is not started)
+    wots4_add_probe(yobai_result_native_probe SOURCES tests/yobai_result_native_probe.cpp
+        LINK_OPTIONS /BASE:0x10000000 /DYNAMICBASE
+        ARGS ${unpacked_native} $<TARGET_FILE:mod_bug_fix> NEEDS_EXE)
+    add_dependencies(yobai_result_native_probe mod_bug_fix)
 endif()
