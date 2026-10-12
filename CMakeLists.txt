@@ -14,12 +14,10 @@ endif()
 
 wots4_use_minhook()
 
-# Not released until it is confirmed in the actual game
 wots4_add_mod(unofficial_patch SOURCES src/mod.cpp DEF src/mod.def
     LIBS wots4_minhook
     FILES config.ini
-    LICENSES docs/licenses/minhook.txt
-    NO_RELEASE)
+    LICENSES docs/licenses/minhook.txt)
 target_include_directories(mod_unofficial_patch PRIVATE src)
 
 if(WOTS4_BUILD_TESTS)
