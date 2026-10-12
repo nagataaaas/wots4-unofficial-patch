@@ -8,7 +8,7 @@ on:
 
 env:
   # Version of the ModLoader (Mod SDK) to build against. A wots4-mods tag or commit
-  WOTS4_SDK_REF: d2c4849c3ba7f71a7d05dc65c0f30fb10de7facd
+  WOTS4_SDK_REF: master  # ModLoader version to use. Pinning it to a release tag (e.g. v0.1.0) is recommended
 
 jobs:
   build:
@@ -18,13 +18,11 @@ jobs:
         with:
           path: mod
 
-      # While wots4-mods is private, a PAT that can read it (WOTS4_SDK_TOKEN) is required
       - uses: actions/checkout@v4
         with:
           repository: nagataaaas/wots4-mods
           ref: ${{ env.WOTS4_SDK_REF }}
           path: sdk
-          token: ${{ secrets.WOTS4_SDK_TOKEN || github.token }}
 
       - uses: actions/setup-python@v5
         with:
