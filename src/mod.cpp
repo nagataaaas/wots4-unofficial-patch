@@ -42,6 +42,11 @@
 // Retry after death restores the in-memory snapshot (same function, argument 0)
 // and keeps the result, as the game does, so that visit's reward is handed out.
 //
+// Listener orientation: the 3D sound listener (0x6a2660) faces the way the
+// camera looks instead of the opposite way, so sounds in view do not go to the
+// back speakers of a 7.1 mix, where they are nearly silent on stereo output
+// without a virtual surround such as Windows Sonic.
+//
 // Each fix is installed on its own, so a changed game or another Mod's hook
 // on one of them does not stop the others. Each can be turned off in
 // config.ini ([<section>] enabled=0).
@@ -56,6 +61,7 @@
 #include "translucent_depth.h"
 #include "full_screen_reapply.h"
 #include "yobai_result.h"
+#include "listener_orientation.h"
 
 namespace {
 
@@ -547,6 +553,59 @@ uintptr_t __stdcall loadSaveDataHook(void* gameState, const void* saveData, uint
     return returned;
 }
 
+// ---- Listener orientation
+
+// AudioLib: sets the 3D listener. eax = position, ebx = front (the camera's look axis), edi = up,
+// (AudioLib, velocity) on the stack, ret 8. Called once per frame by 0x59fc60 (0x59ff28).
+constexpr uintptr_t setListener = 0x6a2660;
+constexpr uint32_t setListenerHookLength = 5;  // push ebp; mov ebp,esp; push ecx; push esi
+
+void* originalSetListener;
+float passedFront[3];  // Read by the original before the hook returns; only the game's sound update calls it
+float passedUp[3];
+
+bool listenerOrientationCodeMatches() {
+    const unsigned char prologue[] = {0x55,0x8b,0xec,0x51,0x56,0x8b,0xf0,0x8b,0x45,0x08};
+    const unsigned char negate[] = {0xd9,0xe0};  // fchs on each front component
+    const unsigned char setOrientation[] = {0x8b,0x51,0x34};  // mov edx,[ecx+0x34] (SetOrientation)
+    // lea edi,[esp+0x1c] (up); lea ebx,[esp+0x28] (front); lea eax,[esp+0x34] (position); call
+    const unsigned char caller[] = {0x8d,0x7c,0x24,0x1c,0x8d,0x5c,0x24,0x28,0x8d,0x44,0x24,0x34,0xe8};
+    const unsigned char lookAxis[] = {0xd9,0x47,0x64};  // fld [edi+0x64] (camera rotation column 0)
+    const unsigned char upAxis[] = {0xd9,0x47,0x68};    // fld [edi+0x68] (column 1)
+    return same(setListener,prologue,sizeof(prologue)) && same(0x6a281e,negate,sizeof(negate)) &&
+        same(0x6a2837,negate,sizeof(negate)) && same(0x6a2848,negate,sizeof(negate)) &&
+        same(0x6a2845,setOrientation,sizeof(setOrientation)) && same(0x59ff1c,caller,sizeof(caller)) &&
+        static_cast<uintptr_t>(0x59ff2d+*reinterpret_cast<const int32_t*>(va(0x59ff29)))==setListener &&
+        same(0x59fe89,lookAxis,sizeof(lookAxis)) && same(0x59feb6,upAxis,sizeof(upAxis));
+}
+
+void __cdecl writePassedAxes(const float* look, const float* up) {
+    unofficial_patch::correctListenerAxes(look,up,passedFront,passedUp);
+}
+
+// Calls the original with ebx and edi pointing at the corrected axes, and gives the caller its
+// ebx and edi back. eax (the position) and the stack arguments are passed on unchanged.
+__declspec(naked) void setListenerHook() {
+    __asm {
+        push ebx
+        push edi
+        push eax
+        push edi
+        push ebx
+        call writePassedAxes
+        add esp, 8
+        pop eax
+        mov ebx, offset passedFront
+        mov edi, offset passedUp
+        push dword ptr [esp+0x10]
+        push dword ptr [esp+0x10]
+        call dword ptr [originalSetListener]
+        pop edi
+        pop ebx
+        ret 8
+    }
+}
+
 // ---- Settings
 
 wchar_t configPath[1024];  // mods\unofficial_patch\config.ini
@@ -604,6 +663,9 @@ Fix fixes[] = {
     {L"yobai_result_reset","night visit result reset",loadSaveData,loadSaveDataHookLength,
         reinterpret_cast<void*>(&loadSaveDataHook),reinterpret_cast<void**>(&originalLoadSaveData),
         yobaiResultCodeMatches,false},
+    {L"listener_orientation","listener orientation",setListener,setListenerHookLength,
+        reinterpret_cast<void*>(&setListenerHook),&originalSetListener,
+        listenerOrientationCodeMatches,false},
 };
 
 // Checks the setting and the code, and reserves the hook range. Logs why a fix is skipped.

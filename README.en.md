@@ -19,6 +19,8 @@ It fixes the following problems. Detailed explanations of each fix (what the pro
 4. In full screen, the screen turns white and freezes for a moment every time you return to the window, and on some displays it appears to spread past the screen ([Details](docs/fixes/focus_white_screen.md))
    - It happened when Windows scaling is not 100%.
 5. After a night visit (yobai), returning to the title without saving and loading a save with a night visit promise immediately runs the end-of-night-visit process and loses the promise ([Details](docs/fixes/yobai_result_after_title.md))
+6. On stereo output, voices and sound effects near the player in the field are nearly silent and only sounds behind the camera are heard ([Details](docs/fixes/listener_orientation.md))
+   - They can be heard without turning on a spatial sound such as Windows Sonic.
 
 No further fixes are planned at the moment.
 If there is a bug you would like fixed, please open an Issue in this repository and it may be addressed.
@@ -50,6 +52,7 @@ Each fix has its own section. `enabled` set to `1` installs the fix, and `0` lea
 | `skip_full_screen_reapply` | `enabled` | `1` | 4. Fixes the white screen and freeze on returning to the window (skip applying full screen again). |
 | `no_white_background` | `enabled` | `1` | 4. Fixes the white screen and freeze on returning to the window (no white background). |
 | `yobai_result_reset` | `enabled` | `1` | 5. Fixes the night visit promise being lost when loading after returning to the title. |
+| `listener_orientation` | `enabled` | `1` | 6. Fixes sounds near the player being inaudible on stereo output. |
 
 ## Building
 

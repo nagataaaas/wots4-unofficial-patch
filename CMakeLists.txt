@@ -90,4 +90,13 @@ if(WOTS4_BUILD_TESTS)
         LINK_OPTIONS /BASE:0x10000000 /DYNAMICBASE
         ARGS ${unpacked_native} $<TARGET_FILE:mod_unofficial_patch> NEEDS_EXE)
     add_dependencies(yobai_result_native_probe mod_unofficial_patch)
+    # Checks, with synthetic camera axes, where sounds land around the 3D sound listener
+    wots4_add_probe(listener_orientation_probe SOURCES tests/listener_orientation_probe.cpp
+        INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    # Loads mod.dll into a copy of the exe and runs the game's 3D listener update with a fake
+    # DirectSound (no audio device is opened, the game is not started)
+    wots4_add_probe(listener_orientation_native_probe SOURCES tests/listener_orientation_native_probe.cpp
+        LINK_OPTIONS /BASE:0x10000000 /DYNAMICBASE
+        ARGS ${unpacked_native} $<TARGET_FILE:mod_unofficial_patch> NEEDS_EXE)
+    add_dependencies(listener_orientation_native_probe mod_unofficial_patch)
 endif()
