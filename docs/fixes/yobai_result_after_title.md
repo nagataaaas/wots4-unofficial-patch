@@ -1,6 +1,6 @@
 # Night visit reward handed out again after returning to the title
 
-- Status: implemented, needs in-game confirmation
+- Status: confirmed in game (reported 2026-10-12)
 - Code: `src/mod.cpp` (`loadSaveDataHook`, `yobaiResultCodeMatches`), `src/yobai_result.h` (`discardYobaiResult`), hook at `0x4d9f50`
 - Tests: `yobai_result_probe` (9 passed, 0 failed), `yobai_result_native_probe` (16 passed, 0 failed, label `needs_exe`)
 - Last updated: 2026-10-12
@@ -45,7 +45,7 @@ Approach 3.
 - Safety checks at startup: the Mod compares the bytes at `0x4d9f50` and `0x4d9f8b`, the save file load call (`0x53eadd`–`0x53eaf2`, which must read `0x9ecf9c` and `0x9e967c`, push 1 and call `0x4d9f50`), the retry call (`0x4e91b6` pushes 0, after `0x4e918e` reads `0x9ecfa8`), `0x6a05f3` and `0x6a06c4` (reading the result and marking it handled), and `0x53e43a` (clearing after saving, with `0x53e42c` pointing at `0x9ecbb8`). If anything differs, it skips this fix (other fixes are still installed) and writes `night visit result reset skipped: the game code at 0x4d9f50 is not the known version` to `mod_loader.log`. It claims 5 bytes at `0x4d9f50` through `HostApi::claim`.
 - What the player sees: after returning to the title and loading, the promise in the save stays and no reward drops. After dying and retrying, the reward of the visit is handed out as without the Mod. When a result was discarded, the Mod writes `discarded the night visit result N left in memory while loading a save file` to `mod_loader.log`.
 - Verified without starting the game: `yobai_result_probe` checks the reset on synthetic progress objects. `yobai_result_native_probe` installs `mod.dll` on a copy of the exe and runs `0x4d9f50` through the game's own last lines (its body is skipped on the copy). Without the Mod the result stays after a file load; with it a file load sets the result to -1 and the mark to 0, a snapshot load keeps the result, and the caller's registers are kept.
-- Needs in-game confirmation: that loading a save with a promise after a night visit keeps the promise, and that a success followed by death and retry hands out the reward again.
+- Confirmed in game (reported 2026-10-12): loading a save with a promise after a night visit keeps the promise, and a success followed by death and retry hands out the reward again.
 
 ## Notes
 
