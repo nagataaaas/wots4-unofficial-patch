@@ -10,7 +10,7 @@ static void check(const char* label, bool passed) {
 }
 
 int main() {
-    using bug_fix::shouldReturnProperty;
+    using unofficial_patch::shouldReturnProperty;
     const char rescue[]="scenario/p420/BR_14_00_S210";
     check("S210 with the property taken: return it",shouldReturnProperty(rescue,1));
     check("S210 after the property was given back: nothing",!shouldReturnProperty(rescue,0));
@@ -25,9 +25,9 @@ int main() {
     check("no name: nothing",!shouldReturnProperty(nullptr,1));
 
     // SetNextScript copies at most 0x80 bytes, so the buffer may have no terminator.
-    char full[bug_fix::nextScriptSize+1];
+    char full[unofficial_patch::nextScriptSize+1];
     memset(full,'a',sizeof(full));
-    full[bug_fix::nextScriptSize]='\0';
+    full[unofficial_patch::nextScriptSize]='\0';
     check("an unterminated 0x80-byte name: nothing",!shouldReturnProperty(full,1));
 
     printf("RESULT tests=%u failures=%u; synthetic data only\n",tests,failures);

@@ -22,7 +22,7 @@ int main(int argc, char** argv) {
     if(!mapImage(argv[1])) return 3;
     wchar_t temp[MAX_PATH];
     if(!GetTempPathW(MAX_PATH,temp)) return 4;
-    swprintf_s(modDirectory,L"%sbug_fix_config_probe_%lu\\",temp,GetCurrentProcessId());
+    swprintf_s(modDirectory,L"%sunofficial_patch_config_probe_%lu\\",temp,GetCurrentProcessId());
     swprintf_s(configPath,L"%sconfig.ini",modDirectory);
     if(!CreateDirectoryW(modDirectory,nullptr)) return 5;
     const unsigned char originalRelease[]={0x53,0x56,0x57,0x8b,0xf9};

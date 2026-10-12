@@ -9,10 +9,10 @@ static void check(const char* label, bool passed) {
 }
 
 int main() {
-    bug_fix::TranslucentDepthMask mask;
-    check("Direct3D defaults (opaque, Z writing): all channels",mask.effective()==bug_fix::allColorChannels);
+    unofficial_patch::TranslucentDepthMask mask;
+    check("Direct3D defaults (opaque, Z writing): all channels",mask.effective()==unofficial_patch::allColorChannels);
     mask.blending=true;
-    check("blending with Z writing (a character): all channels",mask.effective()==bug_fix::allColorChannels);
+    check("blending with Z writing (a character): all channels",mask.effective()==unofficial_patch::allColorChannels);
     mask.zWriting=false;
     check("blending without Z writing (an effect): no channels",mask.effective()==0);
     mask.requested=0x7;

@@ -12,7 +12,7 @@
 // through an NPC standing in front.
 #include <cstdint>
 
-namespace bug_fix {
+namespace unofficial_patch {
 
 constexpr uint32_t allColorChannels = 0xf;  // D3DCOLORWRITEENABLE_RED | GREEN | BLUE | ALPHA
 
@@ -25,4 +25,4 @@ struct TranslucentDepthMask {
     uint32_t effective() const { return blending&&!zWriting ? 0 : requested; }
 };
 
-}  // namespace bug_fix
+}  // namespace unofficial_patch

@@ -13,15 +13,15 @@ static void check(const char* label, bool passed) {
 
 struct Effect { uintptr_t table, node, follow; float life, unused, time; unsigned char type, rest[7]; };
 static_assert(sizeof(Effect)==0x20,"base effect size (0x4a49c0 frees 0x20)");
-static_assert(offsetof(Effect,follow)==bug_fix::effectFollowOffset,"follow offset");
+static_assert(offsetof(Effect,follow)==unofficial_patch::effectFollowOffset,"follow offset");
 
-struct Model { unsigned char head[bug_fix::modelJointsOffset]; uintptr_t joints[bug_fix::modelJointCount]; };
-struct Manager { unsigned char head[bug_fix::effectSlotsOffset]; uintptr_t slots[bug_fix::effectSlotCount]; };
+struct Model { unsigned char head[unofficial_patch::modelJointsOffset]; uintptr_t joints[unofficial_patch::modelJointCount]; };
+struct Manager { unsigned char head[unofficial_patch::effectSlotsOffset]; uintptr_t slots[unofficial_patch::effectSlotCount]; };
 
 int main() {
-    static unsigned char nodes[2][bug_fix::modelJointCount][0x100], objectNode[0x100];
+    static unsigned char nodes[2][unofficial_patch::modelJointCount][0x100], objectNode[0x100];
     static Model model, other;
-    for(uint32_t j=0;j<bug_fix::modelJointCount;++j) {
+    for(uint32_t j=0;j<unofficial_patch::modelJointCount;++j) {
         model.joints[j]=(uintptr_t)nodes[0][j];
         other.joints[j]=(uintptr_t)nodes[1][j];
     }
@@ -39,9 +39,9 @@ int main() {
     object.type=14; object.follow=(uintptr_t)objectNode; manager.slots[10]=(uintptr_t)&object;
     unattached.type=14; manager.slots[11]=(uintptr_t)&unattached;
     last.type=0x84; last.follow=model.joints[0]; last.node=0x1234; last.time=4.07f;
-    manager.slots[bug_fix::effectSlotCount-1]=(uintptr_t)&last;
+    manager.slots[unofficial_patch::effectSlotCount-1]=(uintptr_t)&last;
 
-    auto detached=bug_fix::detachJointFollowers((uintptr_t)&manager,(uintptr_t)&model);
+    auto detached=unofficial_patch::detachJointFollowers((uintptr_t)&manager,(uintptr_t)&model);
     bool auraCleared=true;
     for(auto& e:aura) auraCleared=auraCleared&&e.follow==0;
     check("effects on the released model's joints are detached",auraCleared);
@@ -52,13 +52,13 @@ int main() {
     check("an effect on a node that is not a joint is kept",object.follow==(uintptr_t)objectNode);
     check("an effect without a follow target is kept",unattached.follow==0);
 
-    check("second pass detaches nothing",bug_fix::detachJointFollowers((uintptr_t)&manager,(uintptr_t)&model)==0);
+    check("second pass detaches nothing",unofficial_patch::detachJointFollowers((uintptr_t)&manager,(uintptr_t)&model)==0);
     foreign.follow=other.joints[1];
-    check("no manager: nothing changes",bug_fix::detachJointFollowers(0,(uintptr_t)&other)==0&&foreign.follow!=0);
-    check("no model: nothing changes",bug_fix::detachJointFollowers((uintptr_t)&manager,0)==0&&foreign.follow!=0);
+    check("no manager: nothing changes",unofficial_patch::detachJointFollowers(0,(uintptr_t)&other)==0&&foreign.follow!=0);
+    check("no model: nothing changes",unofficial_patch::detachJointFollowers((uintptr_t)&manager,0)==0&&foreign.follow!=0);
     // A missing joint (0) must not match an effect whose +8 is 0.
     check("a missing joint does not match an unattached effect",
-        bug_fix::detachJointFollowers((uintptr_t)&manager,(uintptr_t)&model)==0);
+        unofficial_patch::detachJointFollowers((uintptr_t)&manager,(uintptr_t)&model)==0);
 
     printf("RESULT tests=%u failures=%u; synthetic data only\n",tests,failures);
     return failures?1:0;

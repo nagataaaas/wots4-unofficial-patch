@@ -5,7 +5,7 @@
 // joints after the model is freed. This clears them the same way 0x4a8ec0 does.
 #include <cstdint>
 
-namespace bug_fix {
+namespace unofficial_patch {
 
 // Effect manager ([0x9e966c]): 350 effect pointers from +0x1c (0x4a8ec0).
 constexpr uint32_t effectSlotsOffset = 0x1c;
@@ -40,4 +40,4 @@ inline uint32_t detachJointFollowers(uintptr_t manager, uintptr_t model) {
     return detached;
 }
 
-}  // namespace bug_fix
+}  // namespace unofficial_patch

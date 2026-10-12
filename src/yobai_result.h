@@ -9,7 +9,7 @@
 // promise of that visit and not its reward, so the result must be kept there.
 #include <cstdint>
 
-namespace bug_fix {
+namespace unofficial_patch {
 
 // Night visit progress ([0x9ecbb8], 0x44 bytes)
 constexpr uint32_t yobaiResultOffset = 0x9;    // int8: -1 none, 0 success, 1 consolation, 2 Laura, 3 failure
@@ -27,4 +27,4 @@ inline int8_t discardYobaiResult(uint8_t* progress) {
     return result;
 }
 
-}  // namespace bug_fix
+}  // namespace unofficial_patch

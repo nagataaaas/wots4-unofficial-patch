@@ -10,7 +10,7 @@
 #include <cstdint>
 #include <cstring>
 
-namespace bug_fix {
+namespace unofficial_patch {
 
 // Script state ([0x9eb5f8]): SetNextScript (0x55e140) copies the name to +0x2c, 0x80 bytes.
 constexpr uint32_t nextScriptOffset = 0x2c;
@@ -29,4 +29,4 @@ inline bool shouldReturnProperty(const char* nextScript, uint8_t propertyTaken) 
     return !strncmp(nextScript,rescueScript,nextScriptSize);
 }
 
-}  // namespace bug_fix
+}  // namespace unofficial_patch

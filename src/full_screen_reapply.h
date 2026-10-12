@@ -6,7 +6,7 @@
 // stops. When nothing it would set has changed, the call can be skipped: a
 // device that was really lost is still reset by the renderer at the start of the
 // next frame (0x893d00 -> 0x891f80, TestCooperativeLevel).
-namespace bug_fix {
+namespace unofficial_patch {
 
 struct FullScreenState {
     bool requestedFullScreen;          // The argument of 0x538180
@@ -39,4 +39,4 @@ inline const char* fullScreenReapplyReason(const FullScreenState& state) {
     return nullptr;
 }
 
-}  // namespace bug_fix
+}  // namespace unofficial_patch

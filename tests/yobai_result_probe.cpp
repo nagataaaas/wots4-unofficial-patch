@@ -15,18 +15,18 @@ constexpr unsigned char untouched = 0x5a;
 // A progress object with every byte set to untouched except the result and the handled mark.
 static void makeProgress(unsigned char* progress, signed char result, unsigned char handled) {
     memset(progress,untouched,progressSize);
-    progress[bug_fix::yobaiResultOffset]=static_cast<unsigned char>(result);
-    progress[bug_fix::yobaiHandledOffset]=handled;
+    progress[unofficial_patch::yobaiResultOffset]=static_cast<unsigned char>(result);
+    progress[unofficial_patch::yobaiHandledOffset]=handled;
 }
 
 static bool isCleared(const unsigned char* progress) {
-    return static_cast<signed char>(progress[bug_fix::yobaiResultOffset])==bug_fix::noYobaiResult &&
-        progress[bug_fix::yobaiHandledOffset]==0;
+    return static_cast<signed char>(progress[unofficial_patch::yobaiResultOffset])==unofficial_patch::noYobaiResult &&
+        progress[unofficial_patch::yobaiHandledOffset]==0;
 }
 
 static bool othersUntouched(const unsigned char* progress) {
     for(unsigned offset=0;offset<progressSize;++offset) {
-        if(offset==bug_fix::yobaiResultOffset||offset==bug_fix::yobaiHandledOffset)
+        if(offset==unofficial_patch::yobaiResultOffset||offset==unofficial_patch::yobaiHandledOffset)
             continue;
         if(progress[offset]!=untouched)
             return false;
@@ -35,7 +35,7 @@ static bool othersUntouched(const unsigned char* progress) {
 }
 
 int main() {
-    using bug_fix::discardYobaiResult;
+    using unofficial_patch::discardYobaiResult;
     unsigned char progress[progressSize];
 
     // What the reported bug leaves when a save file is loaded: the result was handed out, then the
@@ -55,14 +55,14 @@ int main() {
     makeProgress(progress,1,0);
     check("result not handed out yet: discarded too",discardYobaiResult(progress)==1&&isCleared(progress));
 
-    makeProgress(progress,bug_fix::noYobaiResult,0);
+    makeProgress(progress,unofficial_patch::noYobaiResult,0);
     check("no result: nothing reported, stays cleared",
-        discardYobaiResult(progress)==bug_fix::noYobaiResult&&isCleared(progress)&&othersUntouched(progress));
-    makeProgress(progress,bug_fix::noYobaiResult,1);
+        discardYobaiResult(progress)==unofficial_patch::noYobaiResult&&isCleared(progress)&&othersUntouched(progress));
+    makeProgress(progress,unofficial_patch::noYobaiResult,1);
     check("no result with the mark set: the mark is cleared, nothing reported",
-        discardYobaiResult(progress)==bug_fix::noYobaiResult&&isCleared(progress));
+        discardYobaiResult(progress)==unofficial_patch::noYobaiResult&&isCleared(progress));
 
-    check("no progress object: nothing",discardYobaiResult(nullptr)==bug_fix::noYobaiResult);
+    check("no progress object: nothing",discardYobaiResult(nullptr)==unofficial_patch::noYobaiResult);
 
     printf("RESULT tests=%u failures=%u; synthetic data only\n",tests,failures);
     return failures?1:0;

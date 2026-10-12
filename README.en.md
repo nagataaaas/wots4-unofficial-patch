@@ -1,8 +1,8 @@
-# bug_fix
+# unofficial_patch
 
 [日本語](README.md)
 
-A Mod that fixes crashes and bugs in Way of the Samurai 4.
+An unofficial patch for Way of the Samurai 4. It fixes crashes and bugs and smooths out rough spots in the game.
 
 It is not in a Release yet.
 
@@ -32,7 +32,7 @@ Detailed explanations of each fix (what the problem is, why it happens, the fixe
 
 ## Settings (config.ini)
 
-`mods/bug_fix/config.ini` has a section for each fix (`[<fix name>]`). `enabled=1` installs the fix, `0` does not (the game stays as it is). Without the file or a key, every fix is installed.
+`mods/unofficial_patch/config.ini` has a section for each fix (`[<fix name>]`). `enabled=1` installs the fix, `0` does not (the game stays as it is). Without the file or a key, every fix is installed.
 
 | Section | Fix |
 | --- | --- |

@@ -9,12 +9,12 @@ static void check(const char* label, bool passed) {
 }
 
 // Full screen 3840x2160 on a 125% monitor: the window covers 3072x1728 in its own coordinates.
-static bug_fix::FullScreenState unchanged() {
+static unofficial_patch::FullScreenState unchanged() {
     return {true,true,3840,2160,3840,2160,false,true,0,0,3072,1728,3072,1728};
 }
 
 int main() {
-    using bug_fix::fullScreenReapplyReason;
+    using unofficial_patch::fullScreenReapplyReason;
     auto state=unchanged();
     check("nothing changed: skipped",fullScreenReapplyReason(state)==nullptr);
 

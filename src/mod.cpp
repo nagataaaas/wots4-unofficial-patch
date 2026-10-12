@@ -1,4 +1,5 @@
-// bug_fix: fixes crashes and bugs of Way of the Samurai 4 in memory only.
+// unofficial_patch: fixes crashes, bugs and rough spots of Way of the Samurai 4
+// in memory only.
 //
 // Follow-effect detach: after a character's effects are detached (0x48d520,
 // virtual +0x68, called before the model at +0x18 is freed or replaced), also
@@ -99,7 +100,7 @@ void __fastcall releaseEffectsHook(void* character, void* unused) {
     originalReleaseEffects(character,unused);
     auto manager=readGamePointer(effectManager);
     auto model=*reinterpret_cast<const uintptr_t*>(reinterpret_cast<uintptr_t>(character)+0x18);
-    auto detached=bug_fix::detachJointFollowers(manager,model);
+    auto detached=unofficial_patch::detachJointFollowers(manager,model);
     if(detached&&host->log) {
         char line[96];
         sprintf_s(line,"detached %u effect(s) from the joints of a released model",detached);
@@ -137,9 +138,9 @@ bool __cdecl setNextScriptHook(void* script) {
     auto game=readGamePointer(gameState);
     if(!state||!game)
         return result;
-    auto nextScript=reinterpret_cast<const char*>(state+bug_fix::nextScriptOffset);
-    auto taken=reinterpret_cast<const uint8_t*>(game+bug_fix::propertyTakenOffset);
-    if(!bug_fix::shouldReturnProperty(nextScript,*taken))
+    auto nextScript=reinterpret_cast<const char*>(state+unofficial_patch::nextScriptOffset);
+    auto taken=reinterpret_cast<const uint8_t*>(game+unofficial_patch::propertyTakenOffset);
+    if(!unofficial_patch::shouldReturnProperty(nextScript,*taken))
         return result;
     reinterpret_cast<void (__cdecl*)()>(va(givePlayerProperty))();
     if(*taken)
@@ -162,7 +163,7 @@ using SetRenderStateFunction = HRESULT (STDMETHODCALLTYPE*)(IDirect3DDevice9*, D
 using CreateDeviceFunction = HRESULT (STDMETHODCALLTYPE*)(IDirect3D9*, UINT, D3DDEVTYPE, HWND, DWORD,
     D3DPRESENT_PARAMETERS*, IDirect3DDevice9**);
 
-bug_fix::TranslucentDepthMask depthMask;
+unofficial_patch::TranslucentDepthMask depthMask;
 SetRenderStateFunction originalSetRenderState;
 CreateDeviceFunction originalCreateDevice;
 bool setRenderStateHooked;
@@ -407,8 +408,8 @@ void physicalScreenSize(int& width, int& height) {
     setThreadDpiAwarenessContext(previous);
 }
 
-bug_fix::FullScreenState readFullScreenState(uintptr_t window, bool requestedFullScreen) {
-    bug_fix::FullScreenState state{};
+unofficial_patch::FullScreenState readFullScreenState(uintptr_t window, bool requestedFullScreen) {
+    unofficial_patch::FullScreenState state{};
     state.requestedFullScreen=requestedFullScreen;
     state.alreadyFullScreen=*reinterpret_cast<const uint8_t*>(window+fullScreenOffset)!=0;
     state.wantedWidth=static_cast<int>(readGamePointer(settingsWidth));
@@ -433,7 +434,7 @@ bool __cdecl skipFullScreenReapply(uintptr_t window, int requestedFullScreen) {
     auto state=readFullScreenState(window,(requestedFullScreen&0xff)!=0);
     if(!state.requestedFullScreen)
         return false;  // Leaving full screen is not a re-apply; nothing to log
-    auto reason=bug_fix::fullScreenReapplyReason(state);
+    auto reason=unofficial_patch::fullScreenReapplyReason(state);
     char line[220];
     if(reason)
         sprintf_s(line,"full screen applied again: %s",reason);
@@ -536,8 +537,8 @@ uintptr_t __stdcall loadSaveDataHook(void* gameState, const void* saveData, uint
     if(!(fromFile&0xff))
         return returned;
     auto progress=reinterpret_cast<uint8_t*>(readGamePointer(yobaiProgress));
-    auto discarded=bug_fix::discardYobaiResult(progress);
-    if(discarded==bug_fix::noYobaiResult)
+    auto discarded=unofficial_patch::discardYobaiResult(progress);
+    if(discarded==unofficial_patch::noYobaiResult)
         return returned;
     char line[160];
     sprintf_s(line,"discarded the night visit result %d left in memory while loading a save file; "
@@ -548,7 +549,7 @@ uintptr_t __stdcall loadSaveDataHook(void* gameState, const void* saveData, uint
 
 // ---- Settings
 
-wchar_t configPath[1024];  // mods\bug_fix\config.ini
+wchar_t configPath[1024];  // mods\unofficial_patch\config.ini
 
 bool findConfig(const wchar_t* modDirectory) {
     return modDirectory&&swprintf_s(configPath,L"%sconfig.ini",modDirectory)>=0;
