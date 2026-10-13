@@ -112,18 +112,19 @@ int main(int argc, char** argv) {
     auto brushIndex=(unsigned char*)va(0x5388cb);     // push 0 (WHITE_BRUSH) of the window class
     auto markHandled=(unsigned char*)va(0x6a06c8);    // 1 in mov word [edi+0xa],1 of the night visit result
     auto upAxis=(unsigned char*)va(0x59feb8);         // 0x68 in fld [edi+0x68] of the 3D listener's up axis
+    auto fontStore=(unsigned char*)va(0x4c5628);      // Indexed glyph store of the font database
     joint[3]=0x4c; setTaken[6]=2; deviceOffset[0]=0x3c; screenCompare[1]=0xde; setFullScreen[6]=2; brushIndex[0]=4;
-    markHandled[0]=2; upAxis[0]=0x6c;
+    markHandled[0]=2; upAxis[0]=0x6c; fontStore[0]=0x86;
     check("an unknown exe is refused without changes",
         !initialize(&context)&&claims.empty()&&!memcmp((void*)va(0x48d520),original,sizeof(original)));
     joint[3]=0x48; setTaken[6]=1; deviceOffset[0]=0x38; screenCompare[1]=0xdf; setFullScreen[6]=1; brushIndex[0]=0;
-    markHandled[0]=1; upAxis[0]=0x68;
+    markHandled[0]=1; upAxis[0]=0x68; fontStore[0]=0x87;
 
     check("the Mod initializes on the known exe",initialize(&context)!=FALSE);
-    check("the Mod claims 5 bytes at 0x48d520, 5 at 0x55e140, 9 at 0x5383d0, 7 at 0x538180, 6 at 0x5384c0, "
-        "5 at 0x4d9f50 and 5 at 0x6a2660",
-        claims.size()==7&&claimed(0x48d520,5)&&claimed(0x55e140,5)&&claimed(0x5383d0,9)&&
-        claimed(0x538180,7)&&claimed(0x5384c0,6)&&claimed(0x4d9f50,5)&&claimed(0x6a2660,5)&&releases==0);
+    check("the Mod claims the nine game hook ranges after releasing the refused initialization",
+        claims.size()==9&&claimed(0x4c5530,5)&&claimed(0x68a330,5)&&
+        claimed(0x48d520,5)&&claimed(0x55e140,5)&&claimed(0x5383d0,9)&&
+        claimed(0x538180,7)&&claimed(0x5384c0,6)&&claimed(0x4d9f50,5)&&claimed(0x6a2660,5)&&releases==1);
     check("the hook is written at 0x48d520",*(unsigned char*)va(0x48d520)==0xe9);
     check("both fixes are logged as installed",
         loggedText("follow-effect detach installed at 0x48d520")&&

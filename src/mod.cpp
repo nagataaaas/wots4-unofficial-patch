@@ -63,6 +63,7 @@
 #include "full_screen_reapply.h"
 #include "yobai_result.h"
 #include "listener_orientation.h"
+#include "fullwidth_digits.h"
 
 namespace {
 
@@ -613,6 +614,171 @@ __declspec(naked) void setListenerHook() {
     }
 }
 
+// ---- Fullwidth digits
+
+constexpr uintptr_t prepareFont = 0x4c5530;  // FontData: state 3 registers the loaded glyph records
+constexpr uint32_t prepareFontHookLength = 5;  // push ebp; mov ebp,esp; push -1
+constexpr uintptr_t keyGlyph = 0x68a330;      // Shared by keyboard mapping and tutorial action tokens
+constexpr uint32_t keyGlyphHookLength = 5;   // mov eax,0xffff
+constexpr uintptr_t keyGlyphTable = 0x99c948; // (scan code, glyph code), 8 bytes per entry
+constexpr unsigned keyGlyphEntryCount = 98;
+constexpr size_t keyGlyphEntrySize = 8;
+constexpr unsigned zeroDigitScanCode = 11;
+constexpr size_t fontLoadingStateOffset = 8; // FontData loading state read at 0x4c557d
+constexpr uint32_t fontRegistrationState = 3;
+constexpr size_t fontGlyphLookupOffset = 4;  // FontData glyph lookup filled at 0x4c5626
+constexpr uint32_t digitKeyCodeOffset = unofficial_patch::fullwidthDigitFirst-unofficial_patch::privateDigitFirst;
+
+void* originalPrepareFont;
+void* originalKeyGlyph;
+bool digitKeysSeparated;
+void* fontNeedingAliases;
+
+bool fullwidthDigitsCodeMatches() {
+    const unsigned char prologue[] = {0x55,0x8b,0xec,0x6a,0xff};
+    const unsigned char build[] = {0x8b,0x06,0xc7,0x46,0x08,0x04,0x00,0x00,0x00};
+    const unsigned char store[] = {0x0f,0xb7,0x01,0x8b,0x7e,0x04,0x89,0x0c,0x87};
+    const unsigned char converter[] = {
+        0xb8,0xff,0xff,0x00,0x00,0xb9,0,0,0,0,0x56,0xeb,0x03,0x8d,0x49,0x00,
+        0xbe,0xff,0xff,0x00,0x00,0x66,0x3b,0xc6,0x75,0x21,0x39,0x51,0xfc,0x75,0x08,
+        0x0f,0xb7,0x01,0x66,0x3b,0xc6,0x75,0x14,0x39,0x51,0x04,0x75,0x04,0x0f,0xb7,0x41,
+        0x08,0x83,0xc1,0x10,0x81,0xf9,0,0,0,0,0x7c,0xd5,0x5e,0xc3
+    };
+    if(!same(prepareFont,prologue,sizeof(prologue))||!same(0x4c55d7,build,sizeof(build))||
+        !same(0x4c5620,store,sizeof(store))||!same(keyGlyph,converter,6)||
+        !same(keyGlyph+10,converter+10,43)||!same(keyGlyph+57,converter+57,4)||
+        readGamePointer(keyGlyph+6)!=va(keyGlyphTable+4)||
+        readGamePointer(keyGlyph+53)!=va(keyGlyphTable+4+keyGlyphEntryCount*keyGlyphEntrySize)||
+        readGamePointer(0x4c56dc)!=va(0x4c55d7))
+        return false;
+    for(unsigned digit=0;digit<unofficial_patch::digitCount;++digit) {
+        unsigned key=digit==0?zeroDigitScanCode:digit+1;
+        auto entry=reinterpret_cast<const uint32_t*>(va(keyGlyphTable+(key-1)*keyGlyphEntrySize));
+        if(entry[0]!=key||entry[1]!=unofficial_patch::fullwidthDigitFirst+digit)
+            return false;
+    }
+    return true;
+}
+
+// The file buffer must fit in committed, writable memory before its glyph codes are changed.
+bool writableFontBuffer(const void* buffer, size_t bytes) {
+    auto current=reinterpret_cast<uintptr_t>(buffer);
+    if(!current||bytes>UINTPTR_MAX-current)
+        return false;
+    auto end=current+bytes;
+    while(current<end) {
+        MEMORY_BASIC_INFORMATION region{};
+        if(!VirtualQuery(reinterpret_cast<const void*>(current),&region,sizeof(region))||
+            region.State!=MEM_COMMIT||(region.Protect&(PAGE_GUARD|PAGE_NOACCESS))||
+            !(region.Protect&(PAGE_READWRITE|PAGE_WRITECOPY|PAGE_EXECUTE_READWRITE|PAGE_EXECUTE_WRITECOPY)))
+            return false;
+        current=reinterpret_cast<uintptr_t>(region.BaseAddress)+region.RegionSize;
+    }
+    return true;
+}
+
+// Called during font loading only. No work is added to ordinary text drawing.
+void __cdecl separateLoadedDigitKeys(uintptr_t font) {
+    if(*reinterpret_cast<const uint32_t*>(font+fontLoadingStateOffset)!=fontRegistrationState)
+        return;
+    digitKeysSeparated=false;
+    fontNeedingAliases=reinterpret_cast<void*>(font);
+    auto database=*reinterpret_cast<unofficial_patch::FontDatabase**>(font);
+    unofficial_patch::DigitGlyphs found;
+    if(!writableFontBuffer(database,sizeof(*database))||
+        !writableFontBuffer(database,sizeof(*database)+database->count*sizeof(unofficial_patch::FontGlyph))||
+        !unofficial_patch::findDigitGlyphs(database,found)) {
+        log("fullwidth digits: the loaded font buffer or digit records are unsupported; "
+            "original glyphs and key conversion are kept");
+        return;
+    }
+    unofficial_patch::separateDigitKeys(found);
+    digitKeysSeparated=true;
+    fontNeedingAliases=nullptr;
+    log("fullwidth digits: separated 10 numeric key images from the normal digit glyphs");
+}
+
+void __cdecl keepLoadedDigitKeyAliases(uintptr_t font) {
+    if(fontNeedingAliases!=reinterpret_cast<void*>(font))
+        return;
+    auto lookup=*reinterpret_cast<unofficial_patch::FontGlyph***>(font+fontGlyphLookupOffset);
+    unofficial_patch::keepDigitKeyAliases(lookup);
+    fontNeedingAliases=nullptr;
+}
+
+// FontData is passed in esi. Both helpers preserve the original arguments, flags and return value.
+__declspec(naked) void prepareFontHook() {
+    __asm {
+        pushfd
+        pushad
+        push esi
+        call separateLoadedDigitKeys
+        add esp, 4
+        popad
+        popfd
+        call dword ptr [originalPrepareFont]
+        pushfd
+        pushad
+        push esi
+        call keepLoadedDigitKeyAliases
+        add esp, 4
+        popad
+        popfd
+        ret
+    }
+}
+
+// EDX is the scan code, AX the glyph. Only the returned digit code changes; all other keys,
+// registers and the original flags remain as the shared converter left them.
+__declspec(naked) void keyGlyphHook() {
+    __asm {
+        call dword ptr [originalKeyGlyph]
+        pushfd
+        cmp byte ptr [digitKeysSeparated], 0
+        je unchanged
+        cmp eax, 0xff10
+        jb unchanged
+        cmp eax, 0xff19
+        ja unchanged
+        sub eax, digitKeyCodeOffset
+    unchanged:
+        popfd
+        ret
+    }
+}
+
+// This pair is installed together: a font-only or a key-only hook would break key prompts.
+bool installFullwidthDigits() {
+    if(!fullwidthDigitsCodeMatches()) {
+        log("fullwidth digits skipped: the font loading or key conversion code is not the known version");
+        return false;
+    }
+    if(!host->claim(self,va(prepareFont),prepareFontHookLength)||
+        !host->claim(self,va(keyGlyph),keyGlyphHookLength)) {
+        log("fullwidth digits skipped: the font loading or key conversion range is used by another Mod");
+        return false;
+    }
+    auto fontTarget=reinterpret_cast<void*>(va(prepareFont));
+    auto keyTarget=reinterpret_cast<void*>(va(keyGlyph));
+    if(MH_CreateHook(fontTarget,reinterpret_cast<void*>(&prepareFontHook),&originalPrepareFont)!=MH_OK) {
+        log("fullwidth digits: could not create the font hook; neither hook is installed");
+        return false;
+    }
+    if(MH_CreateHook(keyTarget,reinterpret_cast<void*>(&keyGlyphHook),&originalKeyGlyph)!=MH_OK) {
+        MH_RemoveHook(fontTarget);
+        log("fullwidth digits: could not create the key hook; neither hook is installed");
+        return false;
+    }
+    if(MH_EnableHook(keyTarget)!=MH_OK||MH_EnableHook(fontTarget)!=MH_OK) {
+        MH_RemoveHook(keyTarget);
+        MH_RemoveHook(fontTarget);
+        log("fullwidth digits: could not enable both hooks; neither hook is installed");
+        return false;
+    }
+    log("fullwidth digits installed at 0x4c5530 and 0x68a330; waiting for font loading");
+    return true;
+}
+
 // ---- Settings
 
 wchar_t configPath[1024];  // mods\unofficial_patch\config.ini
@@ -757,8 +923,10 @@ extern "C" BOOL WINAPI ModInitialize(const wots4::ModContext* context) {
         anySelected=false;
     }
     bool depthMaskInstalled=fixEnabled(L"translucent_depth")&&installTranslucentDepthMask();
-    if(!anySelected&&!depthMaskInstalled) {
+    bool fullwidthDigitsInstalled=fixEnabled(L"fullwidth_digits")&&installFullwidthDigits();
+    if(!anySelected&&!depthMaskInstalled&&!fullwidthDigitsInstalled) {
         log("no fix can be installed; nothing changed");
+        host->releaseClaims(self);
         MH_Uninitialize();
         return FALSE;
     }

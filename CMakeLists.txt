@@ -21,6 +21,8 @@ wots4_add_mod(unofficial_patch SOURCES src/mod.cpp DEF src/mod.def
 target_include_directories(mod_unofficial_patch PRIVATE src)
 
 if(WOTS4_BUILD_TESTS)
+    wots4_add_probe(fullwidth_digits_probe SOURCES tests/fullwidth_digits_probe.cpp
+        INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src)
     # Checks, with synthetic data, the detach of effects that follow a character model's joints
     wots4_add_probe(follow_detach_probe SOURCES tests/follow_detach_probe.cpp
         INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -34,6 +36,12 @@ if(WOTS4_BUILD_TESTS)
     # (the game is not started). Not yet matched against the ending crash reported in the actual game.
     set(WOTS4_UNPACKED_EXE "${WOTS4_ROOT}/research/bin/WayOfTheSamurai4.unpacked.exe" CACHE FILEPATH "Decrypted exe")
     file(TO_NATIVE_PATH "${WOTS4_UNPACKED_EXE}" unpacked_native)
+    # Runs font registration and shared key conversion on the copied exe with synthetic fonts.
+    wots4_add_probe(fullwidth_digits_native_probe SOURCES tests/fullwidth_digits_native_probe.cpp
+        INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src
+        LINK_OPTIONS /BASE:0x10000000 /DYNAMICBASE
+        ARGS ${unpacked_native} $<TARGET_FILE:mod_unofficial_patch> NEEDS_EXE)
+    add_dependencies(fullwidth_digits_native_probe mod_unofficial_patch)
     wots4_add_probe(jail_ending_native_probe SOURCES tests/jail_ending_native_probe.cpp
         LINK_OPTIONS /BASE:0x10000000 /DYNAMICBASE ARGS ${unpacked_native} NEEDS_EXE)
     # Loads mod.dll into a copy of the exe and runs the game's effect update and character effect release
