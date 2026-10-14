@@ -47,6 +47,17 @@
 // back speakers of a 7.1 mix, where they are nearly silent on stereo output
 // without a virtual surround such as Windows Sonic.
 //
+// Text input keyboard buttons: while the shared text input of the sect name and
+// weapon names (0x4f4b10) is polled, the keyboard does not act as pad buttons, as
+// in the player name input, so E (Back) and Space (OK) can be typed through the IME.
+//
+// Text input characters: that input classifies typed characters with the C
+// runtime's isalnum, which drops or takes Japanese characters at random; the call
+// at 0x4f4be7 goes to a check that keeps ASCII as before and takes other text.
+//
+// Player name characters: the player name input drops characters from U+8000 up
+// (a signed comparison at 0x5f7604); its jump at 0x5f7607 only skips 0.
+//
 // Sound slot release: a sound stopped while paused by a menu, or before the
 // slot update saw it playing, is freed like one that ended (0x5a1210), and a
 // slot taken from a playing sound when all 24 are in use stops that sound first
@@ -70,6 +81,7 @@
 #include "yobai_result.h"
 #include "listener_orientation.h"
 #include "fullwidth_digits.h"
+#include "text_input.h"
 #include "sound_slots.h"
 
 namespace {
@@ -81,9 +93,9 @@ const wots4::HostApi* host;
 uintptr_t va(uintptr_t address) { return gameBase+address-0x400000; }
 
 // HostApi only grows at the end, so an older ModLoader still serves this Mod when it
-// reaches releaseClaims, the last member used here.
+// reaches onFrame, the last member used here.
 bool hostHasUsedMembers(const wots4::HostApi* candidate) {
-    return candidate->size>=offsetof(wots4::HostApi,releaseClaims)+sizeof(candidate->releaseClaims);
+    return candidate->size>=offsetof(wots4::HostApi,onFrame)+sizeof(candidate->onFrame);
 }
 
 bool same(uintptr_t address, const unsigned char* bytes, size_t count) {
@@ -786,6 +798,133 @@ bool installFullwidthDigits() {
     return true;
 }
 
+// ---- Text input keyboard buttons
+
+// bool __stdcall (text input engine), ret 4: polls the shared text input of the sect name
+// (0x5d417f) and weapon names (0x6171a6) every frame; true when the text was accepted or cancelled.
+constexpr uintptr_t pollTextInput = 0x4f4b10;
+constexpr uint32_t pollTextInputHookLength = 6;  // push ebp; mov ebp,esp; sub esp,0x20
+constexpr uintptr_t inputSystem = 0x9e968c;
+constexpr uint32_t keyboardMappingOffset = 0x20;  // uint8: keys act as pad buttons while nonzero (0x4f285a)
+
+bool (__stdcall* originalPollTextInput)(void* engine);
+unofficial_patch::KeyboardMappingPause keyboardPause;
+bool frameCallbackRegistered;
+
+bool textInputKeyboardCodeMatches() {
+    const unsigned char prologue[] = {0x55,0x8b,0xec,0x83,0xec,0x20,0x53,0x8b,0x5d,0x08};
+    const unsigned char mapKeys[] = {0x80,0x7b,0x20,0x00,0x74,0x18};  // cmp byte [ebx+0x20],0; je
+    const unsigned char loadInput[] = {0xa1};                         // mov eax,[0x9e968c]
+    const unsigned char pauseKeys[] = {0xc6,0x40,0x20,0x00};          // mov byte [eax+0x20],0 (player name)
+    return same(pollTextInput,prologue,sizeof(prologue)) && same(0x4f285a,mapKeys,sizeof(mapKeys)) &&
+        same(0x5f6e18,loadInput,sizeof(loadInput)) && readGamePointer(0x5f6e19)==va(inputSystem) &&
+        same(0x5f6e1d,pauseKeys,sizeof(pauseKeys));
+}
+
+uint8_t* keyboardMapping() {
+    auto input=readGamePointer(inputSystem);
+    return input?reinterpret_cast<uint8_t*>(input+keyboardMappingOffset):nullptr;
+}
+
+// Runs every frame while a name is typed, so it only reads and writes one byte around the call.
+bool __stdcall pollTextInputHook(void* engine) {
+    auto mapping=keyboardMapping();
+    if(!mapping)
+        return originalPollTextInput(engine);
+    keyboardPause.beforePoll(*mapping);
+    bool finished=originalPollTextInput(engine);
+    keyboardPause.afterPoll(finished,*mapping);
+    return finished;
+}
+
+// Runs every frame; logs only in the rare case of a text input closed without finishing.
+void WINAPI resumeKeyboardButtonsAfterTextInput(void*) {
+    auto mapping=keyboardMapping();
+    if(mapping&&keyboardPause.onFrame(*mapping))
+        log("text input was closed without finishing; keyboard keys act as buttons again");
+}
+
+// ---- Code patches
+
+// Writes the game code at address. Called during initialization only.
+bool writeGameCode(uintptr_t address, const unsigned char* bytes, size_t count) {
+    auto target=reinterpret_cast<void*>(va(address));
+    DWORD previous;
+    if(!VirtualProtect(target,count,PAGE_EXECUTE_READWRITE,&previous))
+        return false;
+    memcpy(target,bytes,count);
+    VirtualProtect(target,count,previous,&previous);
+    FlushInstructionCache(GetCurrentProcess(),target,count);
+    return true;
+}
+
+struct CodePatch {
+    const wchar_t* section;  // In config.ini
+    const char* name;
+    uintptr_t address;
+    uint32_t length;
+    bool (*codeMatches)();
+    void (*makeBytes)(unsigned char* bytes);  // length bytes to write at address
+};
+
+// ---- Text input characters
+
+// call [isalnum] with the typed code unit sign-extended from 16 bits (movsx eax,si at 0x4f4bd0)
+constexpr uintptr_t textInputCharacterCheck = 0x4f4be7;
+constexpr uint32_t textInputCharacterCheckLength = 6;
+constexpr uintptr_t isalnumImport = 0x905330;
+
+bool textInputCharacterCodeMatches() {
+    const unsigned char typed[] = {0x0f,0xbf,0xc6};  // movsx eax,si
+    // cmp eax,0xd; je; cmp eax,0x1b; je; push eax; call [isalnum]
+    const unsigned char check[] = {0x83,0xf8,0x0d,0x74,0x64,0x83,0xf8,0x1b,0x74,0x52,0x50,0xff,0x15};
+    const unsigned char result[] = {0x83,0xc4,0x04,0x85,0xc0,0x75,0x0a};  // add esp,4; test eax,eax; jne
+    return same(0x4f4bd0,typed,sizeof(typed)) && same(0x4f4bdc,check,sizeof(check)) &&
+        readGamePointer(0x4f4be9)==va(isalnumImport) && same(0x4f4bed,result,sizeof(result));
+}
+
+// Called by the game in place of isalnum, once per typed character.
+int __cdecl acceptsTypedCharacter(int signExtendedCodeUnit) {
+    return unofficial_patch::acceptsTextInputCharacter(static_cast<uint16_t>(signExtendedCodeUnit));
+}
+
+void makeTextInputCharacterPatch(unsigned char* bytes) {
+    constexpr unsigned char callRelative = 0xe8;
+    constexpr unsigned char nop = 0x90;
+    auto next=va(textInputCharacterCheck)+5;
+    auto displacement=static_cast<int32_t>(reinterpret_cast<uintptr_t>(&acceptsTypedCharacter)-next);
+    bytes[0]=callRelative;
+    memcpy(bytes+1,&displacement,sizeof(displacement));
+    bytes[5]=nop;
+}
+
+// ---- Player name characters
+
+// test ax,ax; jle (skip the character): a signed 16-bit test that also skips U+8000 and up
+constexpr uintptr_t playerNameCharacterSkip = 0x5f7607;
+constexpr uint32_t playerNameCharacterSkipLength = 6;
+
+bool playerNameCharacterCodeMatches() {
+    // movzx eax,cx; test cx,cx; je (end of the typed characters)
+    const unsigned char typed[] = {0x0f,0xb7,0xc1,0x66,0x85,0xc9,0x0f,0x84};
+    // cmp ecx,0x1b; je; test ax,ax; jle +0x171; cmp esi,0x1f
+    const unsigned char skip[] = {0x83,0xf9,0x1b,0x74,0x46,0x66,0x85,0xc0,0x0f,0x8e,0x71,0x01,0x00,0x00,0x83,0xfe,0x1f};
+    return same(0x5f75e6,typed,sizeof(typed)) && same(0x5f75ff,skip,sizeof(skip));
+}
+
+// jle -> je, same target: only a 0 would be skipped, and 0 already ended the loop.
+void makePlayerNameCharacterPatch(unsigned char* bytes) {
+    const unsigned char jumpIfZero[] = {0x0f,0x84,0x71,0x01,0x00,0x00};
+    memcpy(bytes,jumpIfZero,sizeof(jumpIfZero));
+}
+
+const CodePatch codePatches[] = {
+    {L"text_input_characters","text input characters",textInputCharacterCheck,textInputCharacterCheckLength,
+        textInputCharacterCodeMatches,makeTextInputCharacterPatch},
+    {L"player_name_characters","player name characters",playerNameCharacterSkip,playerNameCharacterSkipLength,
+        playerNameCharacterCodeMatches,makePlayerNameCharacterPatch},
+};
+
 // ---- Sound slot release
 
 // SoundMain.cpp: stops the sound of a slot. eax = slot (or 0), (sound manager, fade seconds) on
@@ -987,6 +1126,7 @@ struct Fix {
     void** original;
     bool (*codeMatches)();
     bool selected;
+    bool needsFrameCallback=false;
 };
 
 Fix fixes[] = {
@@ -1011,6 +1151,9 @@ Fix fixes[] = {
     {L"listener_orientation","listener orientation",setListener,setListenerHookLength,
         reinterpret_cast<void*>(&setListenerHook),&originalSetListener,
         listenerOrientationCodeMatches,false},
+    {L"text_input_keyboard","text input keyboard buttons",pollTextInput,pollTextInputHookLength,
+        reinterpret_cast<void*>(&pollTextInputHook),reinterpret_cast<void**>(&originalPollTextInput),
+        textInputKeyboardCodeMatches,false,true},
 };
 
 // Checks the setting and the code, and reserves the hook range. Logs why a fix is skipped.
@@ -1024,11 +1167,45 @@ bool select(Fix& fix) {
         log(line);
         return false;
     }
+    if(fix.needsFrameCallback&&!frameCallbackRegistered) {
+        sprintf_s(line,"%s skipped: the ModLoader does not call this Mod every frame (onFrame)",fix.name);
+        log(line);
+        return false;
+    }
     if(!host->claim(self,va(fix.target),fix.hookLength)) {
         sprintf_s(line,"%s skipped: 0x%x is used by another Mod",fix.name,static_cast<unsigned>(fix.target));
         log(line);
         return false;
     }
+    return true;
+}
+
+// Checks the setting and the code, reserves the range and writes the patch. Logs the outcome.
+bool installCodePatch(const CodePatch& patch) {
+    if(!fixEnabled(patch.section))
+        return false;
+    char line[160];
+    if(!patch.codeMatches()) {
+        sprintf_s(line,"%s skipped: the game code at 0x%x is not the known version",patch.name,
+            static_cast<unsigned>(patch.address));
+        log(line);
+        return false;
+    }
+    if(!host->claim(self,va(patch.address),patch.length)) {
+        sprintf_s(line,"%s skipped: 0x%x is used by another Mod",patch.name,static_cast<unsigned>(patch.address));
+        log(line);
+        return false;
+    }
+    unsigned char bytes[16];
+    patch.makeBytes(bytes);
+    if(!writeGameCode(patch.address,bytes,patch.length)) {
+        sprintf_s(line,"%s skipped: the game code at 0x%x could not be made writable",patch.name,
+            static_cast<unsigned>(patch.address));
+        log(line);
+        return false;
+    }
+    sprintf_s(line,"%s installed at 0x%x",patch.name,static_cast<unsigned>(patch.address));
+    log(line);
     return true;
 }
 
@@ -1080,6 +1257,8 @@ extern "C" BOOL WINAPI ModInitialize(const wots4::ModContext* context) {
         return FALSE;
     }
     resolveSetThreadDpiAwarenessContext();
+    // Does nothing until the text input hook pauses the keyboard buttons.
+    frameCallbackRegistered=host->onFrame&&host->onFrame(self,resumeKeyboardButtonsAfterTextInput,nullptr);
     bool anySelected=false;
     for(auto& fix:fixes)
         anySelected|=fix.selected=select(fix);
@@ -1097,7 +1276,12 @@ extern "C" BOOL WINAPI ModInitialize(const wots4::ModContext* context) {
     bool depthMaskInstalled=fixEnabled(L"translucent_depth")&&installTranslucentDepthMask();
     bool fullwidthDigitsInstalled=fixEnabled(L"fullwidth_digits")&&installFullwidthDigits();
     bool soundSlotReleaseInstalled=fixEnabled(L"sound_slot_release")&&installSoundSlotRelease();
-    if(!anySelected&&!depthMaskInstalled&&!fullwidthDigitsInstalled&&!soundSlotReleaseInstalled) {
+    // After every hook, because a failed hook releases all of this Mod's reservations.
+    bool anyPatchInstalled=false;
+    for(auto& patch:codePatches)
+        anyPatchInstalled|=installCodePatch(patch);
+    if(!anySelected&&!depthMaskInstalled&&!fullwidthDigitsInstalled&&!soundSlotReleaseInstalled&&
+        !anyPatchInstalled) {
         log("no fix can be installed; nothing changed");
         host->releaseClaims(self);
         MH_Uninitialize();

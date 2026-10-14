@@ -38,7 +38,8 @@ int main(int argc, char** argv) {
         "[physical_screen_check]\r\nenabled=0\r\n[skip_full_screen_reapply]\r\nenabled=0\r\n"
         "[no_white_background]\r\nenabled=0\r\n[yobai_result_reset]\r\nenabled=0\r\n"
         "[listener_orientation]\r\nenabled=0\r\n[fullwidth_digits]\r\nenabled=0\r\n"
-        "[sound_slot_release]\r\nenabled=0\r\n");
+        "[text_input_keyboard]\r\nenabled=0\r\n[text_input_characters]\r\nenabled=0\r\n"
+        "[player_name_characters]\r\nenabled=0\r\n[sound_slot_release]\r\nenabled=0\r\n");
     check("every fix disabled: the Mod refuses to load",!initialize(&context));
     check("every fix disabled: nothing is claimed or written",
         claims.empty()&&!memcmp((void*)va(0x48d520),originalRelease,sizeof(originalRelease)));
@@ -50,7 +51,12 @@ int main(int argc, char** argv) {
         loggedText("[yobai_result_reset] disabled in config.ini")&&
         loggedText("[listener_orientation] disabled in config.ini")&&
         loggedText("[fullwidth_digits] disabled in config.ini")&&
+        loggedText("[text_input_keyboard] disabled in config.ini")&&
+        loggedText("[text_input_characters] disabled in config.ini")&&
+        loggedText("[player_name_characters] disabled in config.ini")&&
         loggedText("[sound_slot_release] disabled in config.ini"));
+    check("the text input and the player name input are left unchanged",
+        *(unsigned char*)va(0x4f4b10)==0x55&&*(unsigned char*)va(0x4f4be7)==0xff&&*(unsigned char*)va(0x5f7608)==0x8e);
     check("font loading and numeric key conversion are left unchanged",
         *(unsigned char*)va(0x4c5530)==0x55&&*(unsigned char*)va(0x68a330)==0xb8);
     check("the display mode check is left unchanged",*(unsigned char*)va(0x5383d0)==0x55);
@@ -65,7 +71,8 @@ int main(int argc, char** argv) {
         "[physical_screen_check]\r\nenabled=0\r\n[skip_full_screen_reapply]\r\nenabled=0\r\n"
         "[no_white_background]\r\nenabled=0\r\n[yobai_result_reset]\r\nenabled=0\r\n"
         "[listener_orientation]\r\nenabled=0\r\n[fullwidth_digits]\r\nenabled=0\r\n"
-        "[sound_slot_release]\r\nenabled=0\r\n");
+        "[text_input_keyboard]\r\nenabled=0\r\n[text_input_characters]\r\nenabled=0\r\n"
+        "[player_name_characters]\r\nenabled=0\r\n[sound_slot_release]\r\nenabled=0\r\n");
     check("one fix enabled: the Mod initializes",initialize(&context)!=FALSE);
     check("only the enabled fix is claimed (0x55e140)",claims.size()==1&&claimed(0x55e140,5));
     check("the disabled fix leaves 0x48d520 unchanged",

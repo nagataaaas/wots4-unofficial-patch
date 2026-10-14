@@ -23,7 +23,10 @@ It fixes the following problems. Detailed explanations of each fix (what the pro
    - They can be heard without turning on a spatial sound such as Windows Sonic.
 7. Fullwidth digits in dialogue and item descriptions appear as solid black boxes ([Details](docs/fixes/fullwidth_digits.md))
    - Numeric key images in input reassignment and tutorials are preserved. The numeric key images still need in-game confirmation.
-8. After torture or an arrest, the fishing success sound and the voices of shopkeepers and others stop playing, and opening or closing a menu plays the torture sound ([Details](docs/fixes/sound_slot_leak.md))
+8. When naming a sect or a sword, typing "e" (as in え or け) with the IME closes the input because E is the Back key, and Japanese characters are taken or dropped at random ([Details](docs/fixes/text_input.md))
+   - While typing, keyboard keys no longer act as buttons (E = Back, Space = OK). On the keyboard, Enter accepts and Esc goes back, as in the player name input.
+   - Also lets the player's name take some kanji such as 鬼, 郎 and 龍, and fullwidth letters and digits, which it dropped.
+9. After torture or an arrest, the fishing success sound and the voices of shopkeepers and others stop playing, and opening or closing a menu plays the torture sound ([Details](docs/fixes/sound_slot_leak.md))
    - Without the fix this lasted until the game was restarted. The fix does not undo it once it has happened, so restart the game.
    - Sword clashes that keep sounding, for example in group battles, are expected to be fixed too (needs in-game confirmation).
 
@@ -64,7 +67,10 @@ Each fix has its own section. `enabled` set to `1` installs the fix, and `0` lea
 | `yobai_result_reset` | `enabled` | `1` | 5. Fixes the night visit promise being lost when loading after returning to the title. |
 | `listener_orientation` | `enabled` | `1` | 6. Fixes sounds near the player being inaudible on stereo output. |
 | `fullwidth_digits` | `enabled` | `1` | 7. Fixes fullwidth digits while preserving numeric key images in control prompts. |
-| `sound_slot_release` | `enabled` | `1` | 8. Keeps sound effects and voices from going silent, for example after torture. |
+| `text_input_keyboard` | `enabled` | `1` | 8. Keeps E and Space from closing the sect name and sword name input while typing. |
+| `text_input_characters` | `enabled` | `1` | 8. Lets the sect name and sword names take Japanese characters. |
+| `player_name_characters` | `enabled` | `1` | 8. Lets the player's name take some kanji and fullwidth letters and digits. |
+| `sound_slot_release` | `enabled` | `1` | 9. Keeps sound effects and voices from going silent, for example after torture. |
 
 ## Building
 
