@@ -47,6 +47,12 @@
 // back speakers of a 7.1 mix, where they are nearly silent on stereo output
 // without a virtual surround such as Windows Sonic.
 //
+// Sound slot release: a sound stopped while paused by a menu, or before the
+// slot update saw it playing, is freed like one that ended (0x5a1210), and a
+// slot taken from a playing sound when all 24 are in use stops that sound first
+// (0x5a19e0). Leaked slots made streamed voices and sound effects go silent
+// until a restart and replayed stopped loops when a menu closed.
+//
 // Each fix is installed on its own, so a changed game or another Mod's hook
 // on one of them does not stop the others. Each can be turned off in
 // config.ini ([<section>] enabled=0).
@@ -64,6 +70,7 @@
 #include "yobai_result.h"
 #include "listener_orientation.h"
 #include "fullwidth_digits.h"
+#include "sound_slots.h"
 
 namespace {
 
@@ -779,6 +786,171 @@ bool installFullwidthDigits() {
     return true;
 }
 
+// ---- Sound slot release
+
+// SoundMain.cpp: stops the sound of a slot. eax = slot (or 0), (sound manager, fade seconds) on
+// the stack, returns al, ret 8. Every stop goes through it: by handle (0x5a11b0), by group
+// (0x5a1e20, used by map changes) and the stream limit in 0x5a19e0.
+constexpr uintptr_t stopSoundSlot = 0x5a1210;
+constexpr uint32_t stopSoundSlotHookLength = 6;  // push ebp; mov ebp,esp; push ebx; mov ebx,eax
+// SoundMain.cpp: picks the slot for a new sound. eax = priority, ebx = slot manager, (bool stream)
+// on the stack, returns the slot in eax (0: none), ret 4. Only called by 0x5a2900, which fills in
+// the slot. When all 24 are in use it returns one of them without stopping its sound (0x5a1a90).
+constexpr uintptr_t acquireSoundSlot = 0x5a19e0;
+constexpr uint32_t acquireSoundSlotHookLength = 7;  // push ebp; mov ebp,esp; cmp byte [ebp+8],0
+constexpr uintptr_t soundSlots = 0x9f02c0;
+constexpr uint32_t slotHandleOffset = 0x28;
+constexpr uintptr_t freeChannel = 0x5a0290;  // esi = channel: stops its Sound and frees it
+constexpr uintptr_t resetSoundSlot = 0x5a03a0;  // eax = slot: back to unused
+
+void* originalStopSoundSlot;
+void* originalAcquireSoundSlot;
+
+bool soundSlotCodeMatches() {
+    // ...; test ebx,ebx; je; cmp dword [ebx+0x18],0; jne; mov dword [ebx+0x10],2
+    const unsigned char stop[] = {0x55,0x8b,0xec,0x53,0x8b,0xd8,0x85,0xdb,0x74,0x0d,0x83,0x7b,0x18,0x00,
+        0x75,0x0e,0xc7,0x43,0x10,0x02,0x00,0x00,0x00};
+    // fldz; fld [ebp+0xc]; fcom st(1); fnstsw ax; test ah,0x41; jp (fade above 0)
+    const unsigned char fadeTest[] = {0xd9,0xee,0xd9,0x45,0x0c,0xd8,0xd1,0xdf,0xe0,0xf6,0xc4,0x41,0x7a,0x12};
+    // mov al,[esi+0x19]; push ebx; lea ebx,[esi+0x19]; push ebx; mov [esi+0x18],al; call (is playing)
+    const unsigned char playing[] = {0x8a,0x46,0x19,0x53,0x8d,0x5e,0x19,0x53,0x88,0x46,0x18,0xe8};
+    // cmp byte [esi+0xc],0; jne; cmp byte [esi+0x18],0; je; cmp byte [ebx],0; jne; mov ecx,[esi+0x14]
+    const unsigned char notify[] = {0x80,0x7e,0x0c,0x00,0x75,0x35,0x80,0x7e,0x18,0x00,0x74,0x19,0x80,0x3b,0x00,
+        0x75,0x14,0x8b,0x4e,0x14};
+    const unsigned char setCallback[] = {0xc7,0x43,0x14};  // mov dword [ebx+0x14],0x5a1950
+    const unsigned char acquire[] = {0x55,0x8b,0xec,0x80,0x7d,0x08,0x00,0x56,0x57,0x8b,0xf0};
+    const unsigned char storeHandle[] = {0x89,0x88};  // mov [eax+0x9f02e8],ecx (slot +0x28)
+    const unsigned char channelFree[] = {0x57,0x8b,0x7e,0x04,0x85,0xff,0x74,0x05,0xe8};
+    const unsigned char slotReset[] = {0x55,0x8b,0xec,0x83,0xec,0x0c,0x33,0xc9,0x88,0x48,0x34};
+    auto callTarget=[](uintptr_t call) {
+        return static_cast<uintptr_t>(call+5+*reinterpret_cast<const int32_t*>(va(call+1)));
+    };
+    return same(stopSoundSlot,stop,sizeof(stop)) && same(0x5a1243,fadeTest,sizeof(fadeTest)) &&
+        callTarget(0x5a1257)==0x6a24e0 && same(0x6a2488,playing,sizeof(playing)) &&
+        same(0x6a2498,notify,sizeof(notify)) && callTarget(0x5a0684)==0x6a2480 &&
+        same(0x5a10c0,setCallback,sizeof(setCallback)) && readGamePointer(0x5a10c3)==va(0x5a1950) &&
+        same(acquireSoundSlot,acquire,sizeof(acquire)) && same(0x5a1b29,storeHandle,sizeof(storeHandle)) &&
+        readGamePointer(0x5a1b2b)==va(soundSlots+slotHandleOffset) && callTarget(0x5a2a9d)==acquireSoundSlot &&
+        same(freeChannel,channelFree,sizeof(channelFree)) && same(resetSoundSlot,slotReset,sizeof(slotReset));
+}
+
+// Runs on every stop of a sound, so it only reads and writes a few bytes and does not log.
+void __cdecl releaseStoppedSlot(uintptr_t slot, float fadeSeconds) {
+    unofficial_patch::prepareStoppedSlotRelease(slot,fadeSeconds);
+}
+
+// 0x5a1210 takes the slot in eax and leaves it there, so it is still the slot afterwards.
+__declspec(naked) void stopSoundSlotHook() {
+    __asm {
+        push eax
+        push dword ptr [esp+0xc]
+        push dword ptr [esp+0xc]
+        call dword ptr [originalStopSoundSlot]
+        pop ecx
+        push eax
+        push dword ptr [esp+0xc]
+        push ecx
+        call releaseStoppedSlot
+        add esp, 8
+        pop eax
+        ret 8
+    }
+}
+
+void callFreeChannel(uintptr_t channel) {
+    auto function=va(freeChannel);
+    __asm {
+        push esi
+        mov esi, channel
+        call function
+        pop esi
+    }
+}
+
+void callResetSoundSlot(uintptr_t slot) {
+    auto function=va(resetSoundSlot);
+    __asm {
+        mov eax, slot
+        call function
+    }
+}
+
+// The slot 0x5a19e0 picked still plays another sound: stop and free that sound the way the end
+// notification does (0x5a1998), so it does not play on unseen and its old handle stops nothing
+// else. Only happens when all 24 slots are in use, so it may log.
+void __cdecl releaseTakenSlot(uintptr_t slot) {
+    auto handle=*reinterpret_cast<const int32_t*>(slot+slotHandleOffset);
+    auto channel=reinterpret_cast<uintptr_t*>(slot+unofficial_patch::slotChannelOffset);
+    if(*channel) {
+        callFreeChannel(*channel);
+        *channel=0;
+    }
+    auto sound=reinterpret_cast<void**>(slot+unofficial_patch::slotSoundOffset);
+    if(*sound) {
+        auto destroy=reinterpret_cast<void (__thiscall*)(void*, int)>(vtableEntry(*sound,0));
+        destroy(*sound,1);
+        *sound=nullptr;
+    }
+    // 0x5a2900 fills in the sound but not the state of the old one (+0x8, +0xc, +0x10).
+    callResetSoundSlot(slot);
+    *reinterpret_cast<int32_t*>(slot+slotHandleOffset)=handle;
+    char line[120];
+    sprintf_s(line,"all 24 sound slots were in use; stopped the sound in slot %u for a new one",
+        static_cast<unsigned>((slot-va(soundSlots))/0x74));
+    log(line);
+}
+
+// eax and ebx go to the original unchanged; the stream flag is passed on.
+__declspec(naked) void acquireSoundSlotHook() {
+    __asm {
+        push dword ptr [esp+4]
+        call dword ptr [originalAcquireSoundSlot]
+        test eax, eax
+        jz done
+        cmp byte ptr [eax+0x34], 0
+        je done
+        push eax
+        push eax
+        call releaseTakenSlot
+        add esp, 4
+        pop eax
+    done:
+        ret 4
+    }
+}
+
+// Both hooks are installed together or not at all, as one fix.
+bool installSoundSlotRelease() {
+    if(!soundSlotCodeMatches()) {
+        log("sound slot release skipped: the game code at 0x5a1210 or 0x5a19e0 is not the known version");
+        return false;
+    }
+    if(!host->claim(self,va(stopSoundSlot),stopSoundSlotHookLength)||
+        !host->claim(self,va(acquireSoundSlot),acquireSoundSlotHookLength)) {
+        log("sound slot release skipped: 0x5a1210 or 0x5a19e0 is used by another Mod");
+        return false;
+    }
+    auto stopTarget=reinterpret_cast<void*>(va(stopSoundSlot));
+    auto acquireTarget=reinterpret_cast<void*>(va(acquireSoundSlot));
+    if(MH_CreateHook(stopTarget,reinterpret_cast<void*>(&stopSoundSlotHook),&originalStopSoundSlot)!=MH_OK) {
+        log("sound slot release: could not create the hook at 0x5a1210; not installed");
+        return false;
+    }
+    if(MH_CreateHook(acquireTarget,reinterpret_cast<void*>(&acquireSoundSlotHook),&originalAcquireSoundSlot)!=MH_OK) {
+        MH_RemoveHook(stopTarget);
+        log("sound slot release: could not create the hook at 0x5a19e0; not installed");
+        return false;
+    }
+    if(MH_EnableHook(stopTarget)!=MH_OK||MH_EnableHook(acquireTarget)!=MH_OK) {
+        MH_RemoveHook(stopTarget);
+        MH_RemoveHook(acquireTarget);
+        log("sound slot release: could not enable both hooks; not installed");
+        return false;
+    }
+    log("sound slot release installed at 0x5a1210 and 0x5a19e0");
+    return true;
+}
+
 // ---- Settings
 
 wchar_t configPath[1024];  // mods\unofficial_patch\config.ini
@@ -924,7 +1096,8 @@ extern "C" BOOL WINAPI ModInitialize(const wots4::ModContext* context) {
     }
     bool depthMaskInstalled=fixEnabled(L"translucent_depth")&&installTranslucentDepthMask();
     bool fullwidthDigitsInstalled=fixEnabled(L"fullwidth_digits")&&installFullwidthDigits();
-    if(!anySelected&&!depthMaskInstalled&&!fullwidthDigitsInstalled) {
+    bool soundSlotReleaseInstalled=fixEnabled(L"sound_slot_release")&&installSoundSlotRelease();
+    if(!anySelected&&!depthMaskInstalled&&!fullwidthDigitsInstalled&&!soundSlotReleaseInstalled) {
         log("no fix can be installed; nothing changed");
         host->releaseClaims(self);
         MH_Uninitialize();

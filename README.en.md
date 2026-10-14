@@ -23,6 +23,9 @@ It fixes the following problems. Detailed explanations of each fix (what the pro
    - They can be heard without turning on a spatial sound such as Windows Sonic.
 7. Fullwidth digits in dialogue and item descriptions appear as solid black boxes ([Details](docs/fixes/fullwidth_digits.md))
    - Numeric key images in input reassignment and tutorials are preserved. The numeric key images still need in-game confirmation.
+8. After torture or an arrest, the fishing success sound and the voices of shopkeepers and others stop playing, and opening or closing a menu plays the torture sound ([Details](docs/fixes/sound_slot_leak.md))
+   - Without the fix this lasted until the game was restarted. The fix does not undo it once it has happened, so restart the game.
+   - Sword clashes that keep sounding, for example in group battles, are expected to be fixed too (needs in-game confirmation).
 
 No further fixes are planned at the moment.
 If there is a bug you would like fixed, please open an Issue in this repository and it may be addressed.
@@ -61,6 +64,7 @@ Each fix has its own section. `enabled` set to `1` installs the fix, and `0` lea
 | `yobai_result_reset` | `enabled` | `1` | 5. Fixes the night visit promise being lost when loading after returning to the title. |
 | `listener_orientation` | `enabled` | `1` | 6. Fixes sounds near the player being inaudible on stereo output. |
 | `fullwidth_digits` | `enabled` | `1` | 7. Fixes fullwidth digits while preserving numeric key images in control prompts. |
+| `sound_slot_release` | `enabled` | `1` | 8. Keeps sound effects and voices from going silent, for example after torture. |
 
 ## Building
 
