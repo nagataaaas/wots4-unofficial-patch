@@ -123,4 +123,10 @@ if(WOTS4_BUILD_TESTS)
         LINK_OPTIONS /BASE:0x10000000 /DYNAMICBASE
         ARGS ${unpacked_native} $<TARGET_FILE:mod_unofficial_patch> NEEDS_EXE)
     add_dependencies(sound_slots_native_probe mod_unofficial_patch)
+    # Loads mod.dll into a copy of the exe and runs the title's Options state with a synthetic title
+    # and UI manager (the game is not started)
+    wots4_add_probe(title_select_window_native_probe SOURCES tests/title_select_window_native_probe.cpp
+        LINK_OPTIONS /BASE:0x10000000 /DYNAMICBASE
+        ARGS ${unpacked_native} $<TARGET_FILE:mod_unofficial_patch> NEEDS_EXE)
+    add_dependencies(title_select_window_native_probe mod_unofficial_patch)
 endif()

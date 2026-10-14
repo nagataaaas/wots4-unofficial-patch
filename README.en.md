@@ -29,6 +29,7 @@ It fixes the following problems. Detailed explanations of each fix (what the pro
 9. After torture or an arrest, the fishing success sound and the voices of shopkeepers and others stop playing, and opening or closing a menu plays the torture sound ([Details](docs/fixes/sound_slot_leak.md))
    - Without the fix this lasted until the game was restarted. The fix does not undo it once it has happened, so restart the game.
    - Sword clashes that keep sounding, for example in group battles, are expected to be fixed too (needs in-game confirmation).
+10. After opening Options on the title screen, choosing New Game, or loading a save made after the end of a playthrough with Load, can crash the game ([Details](docs/fixes/title_select_window.md))
 
 No further fixes are planned at the moment.
 If there is a bug you would like fixed, please open an Issue in this repository and it may be addressed.
@@ -71,6 +72,7 @@ Each fix has its own section. `enabled` set to `1` installs the fix, and `0` lea
 | `text_input_characters` | `enabled` | `1` | 8. Lets the sect name and sword names take Japanese characters. |
 | `player_name_characters` | `enabled` | `1` | 8. Lets the player's name take some kanji and fullwidth letters and digits. |
 | `sound_slot_release` | `enabled` | `1` | 9. Keeps sound effects and voices from going silent, for example after torture. |
+| `title_select_window` | `enabled` | `1` | 10. Fixes the crash after opening Options on the title screen. |
 
 ## Building
 

@@ -122,7 +122,8 @@ int main(int argc, char** argv) {
         "[skip_full_screen_reapply]\r\nenabled=0\r\n[no_white_background]\r\nenabled=0\r\n"
         "[yobai_result_reset]\r\nenabled=0\r\n[listener_orientation]\r\nenabled=0\r\n"
         "[text_input_keyboard]\r\nenabled=0\r\n[text_input_characters]\r\nenabled=0\r\n"
-        "[player_name_characters]\r\nenabled=0\r\n[sound_slot_release]\r\nenabled=0\r\n",file);
+        "[player_name_characters]\r\nenabled=0\r\n[sound_slot_release]\r\nenabled=0\r\n"
+        "[title_select_window]\r\nenabled=0\r\n",file);
     fclose(file);
 
     // Keep the game's registration loop and its state/return handling. Skip texture construction

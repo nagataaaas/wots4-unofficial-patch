@@ -2,7 +2,7 @@
 
 - Status: confirmed in game (reported 2026-10-11)
 - Code: `src/mod.cpp` (`releaseEffectsHook`, `followDetachCodeMatches`), `src/follow_detach.h` (`detachJointFollowers`), hook at `0x48d520`
-- Tests: `follow_detach_probe` (11 passed, 0 failed), `follow_detach_native_probe` (16 passed, 0 failed, label `needs_exe`)
+- Tests: `follow_detach_probe` (11 passed, 0 failed), `follow_detach_native_probe` (17 passed, 0 failed, label `needs_exe`)
 - Last updated: 2026-10-12
 
 ## Problem

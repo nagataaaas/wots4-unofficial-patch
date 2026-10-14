@@ -64,6 +64,11 @@
 // (0x5a19e0). Leaked slots made streamed voices and sound effects go silent
 // until a restart and replayed stopped loops when a menu closed.
 //
+// Title select window refresh: after Options on the title (its state 0x4ee380),
+// the title points its select window (+0x4c) at the one the UI manager holds,
+// since Options deleted the title's. The New Game confirmation and the difficulty
+// selection after Load used the deleted window and could crash.
+//
 // Each fix is installed on its own, so a changed game or another Mod's hook
 // on one of them does not stop the others. Each can be turned off in
 // config.ini ([<section>] enabled=0).
@@ -83,6 +88,7 @@
 #include "fullwidth_digits.h"
 #include "text_input.h"
 #include "sound_slots.h"
+#include "title_select_window.h"
 
 namespace {
 
@@ -1090,6 +1096,39 @@ bool installSoundSlotRelease() {
     return true;
 }
 
+// ---- Title select window refresh
+
+// The title's Options state (GamePartTitle, set at 0x4ed4e5): ecx = the title, [esp+4] = the event.
+constexpr uintptr_t titleOptionsState = 0x4ee380;
+constexpr uint32_t titleOptionsStateHookLength = 6;  // push ebp; mov ebp,esp; mov eax,[ebp+8]
+
+void (__fastcall* originalTitleOptionsState)(uint8_t* title, void* unused, int32_t event);
+
+bool titleSelectWindowCodeMatches() {
+    const unsigned char prologue[] = {0x55,0x8b,0xec,0x8b,0x45,0x08,0x53,0x56,0x57,0x8b,0xd9};
+    // The title opening: mov edx,[edi+0x58]; push edx; mov esi,0x1b; call 0x67fcf0 (create UI); mov [edi+0x4c],eax
+    const unsigned char titleCreates[] = {0x8b,0x57,0x58,0x52,0xbe,0x1b,0x00,0x00,0x00};
+    const unsigned char titleKeeps[] = {0x89,0x47,0x4c};
+    // Options opening: mov ecx,[0x9ebb8c] (UI manager); push ecx; lea esi,[edi+0x1b] (edi = 0); call 0x67fcf0
+    const unsigned char optionsCreates[] = {0x51,0x8d,0x77,0x1b,0xe8};
+    const unsigned char uiLookup[] = {0x8b,0x44,0xb7,0x04,0xc3};  // mov eax,[edi+esi*4+4]; ret
+    const unsigned char selectsOptions[] = {0xb9};                // mov ecx,0x4ee380 (title case 7)
+    return same(titleOptionsState,prologue,sizeof(prologue)) && same(0x4ed242,titleCreates,sizeof(titleCreates)) &&
+        same(0x4ed250,titleKeeps,sizeof(titleKeeps)) && same(0x6763de,optionsCreates,sizeof(optionsCreates)) &&
+        static_cast<uintptr_t>(0x6763e7+*reinterpret_cast<const int32_t*>(va(0x6763e3)))==0x67fcf0 &&
+        static_cast<uintptr_t>(0x4ed250+*reinterpret_cast<const int32_t*>(va(0x4ed24c)))==0x67fcf0 &&
+        same(0x67fcdc,uiLookup,sizeof(uiLookup)) && same(0x4ed4e5,selectsOptions,sizeof(selectsOptions)) &&
+        readGamePointer(0x4ed4e6)==va(titleOptionsState);
+}
+
+// Runs every frame while Options is open on the title: a few reads, and a log line when the
+// window changes (once each time Options opens).
+void __fastcall titleOptionsStateHook(uint8_t* title, void* unused, int32_t event) {
+    originalTitleOptionsState(title,unused,event);
+    if(unofficial_patch::useCurrentSelectWindow(title))
+        log("title select window refresh: Options replaced the title's select window; the title uses the new one");
+}
+
 // ---- Settings
 
 wchar_t configPath[1024];  // mods\unofficial_patch\config.ini
@@ -1154,6 +1193,9 @@ Fix fixes[] = {
     {L"text_input_keyboard","text input keyboard buttons",pollTextInput,pollTextInputHookLength,
         reinterpret_cast<void*>(&pollTextInputHook),reinterpret_cast<void**>(&originalPollTextInput),
         textInputKeyboardCodeMatches,false,true},
+    {L"title_select_window","title select window refresh",titleOptionsState,titleOptionsStateHookLength,
+        reinterpret_cast<void*>(&titleOptionsStateHook),reinterpret_cast<void**>(&originalTitleOptionsState),
+        titleSelectWindowCodeMatches,false},
 };
 
 // Checks the setting and the code, and reserves the hook range. Logs why a fix is skipped.
