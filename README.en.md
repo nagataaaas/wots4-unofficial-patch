@@ -39,6 +39,11 @@ If there is a bug you would like fixed, please open an Issue in this repository 
 
 To keep your current settings when updating, replace only `mod.dll` and do not overwrite `mods/unofficial_patch/config.ini`.
 
+## Uninstallation
+
+1. Close the game.
+2. Delete the `{game installation folder}/mods/unofficial_patch/` folder. The settings in it (`config.ini`) are deleted too.
+
 ## Settings
 
 Close the game and edit `{game installation folder}/mods/unofficial_patch/config.ini`. Save the file and start the game to apply the settings.
