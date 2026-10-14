@@ -27,8 +27,6 @@ It fixes the following problems. Detailed explanations of each fix (what the pro
    - While typing, keyboard keys no longer act as buttons (E = Back, Space = OK). On the keyboard, Enter accepts and Esc goes back, as in the player name input.
    - Also lets the player's name take some kanji such as 鬼, 郎 and 龍, and fullwidth letters and digits, which it dropped.
 9. After torture or an arrest, the fishing success sound and the voices of shopkeepers and others stop playing, and opening or closing a menu plays the torture sound ([Details](docs/fixes/sound_slot_leak.md))
-   - Without the fix this lasted until the game was restarted. The fix does not undo it once it has happened, so restart the game.
-   - Sword clashes that keep sounding, for example in group battles, are expected to be fixed too (needs in-game confirmation).
 10. After opening Options on the title screen, choosing New Game, or loading a save made after the end of a playthrough with Load, can crash the game ([Details](docs/fixes/title_select_window.md))
 
 No further fixes are planned at the moment.
