@@ -119,19 +119,20 @@ int main(int argc, char** argv) {
     auto soundFade=(unsigned char*)va(0x5a124e);      // 0x41 in test ah,0x41 of the sound stop's fade test
     auto selectWindow=(unsigned char*)va(0x4ed252);   // 0x4c in mov [edi+0x4c],eax of the title's select window
     auto listedBits=(unsigned char*)va(0x536b0a);     // 0x20 in cmp [ebp-0x40],0x20 of the resolution list
+    auto corpseParts=(unsigned char*)va(0x4f5ad1);   // +0x326 in the drop candidate builder
     joint[3]=0x4c; setTaken[6]=2; deviceOffset[0]=0x3c; screenCompare[1]=0xde; setFullScreen[6]=2; brushIndex[0]=4;
     markHandled[0]=2; upAxis[0]=0x6c; fontStore[0]=0x86; keyMapping[0]=0x24; typedResult[0]=0x84; nameLimit[0]=0x20; soundFade[0]=0x40;
-    selectWindow[0]=0x50; listedBits[0]=0x10;
+    selectWindow[0]=0x50; listedBits[0]=0x10; corpseParts[0]=0x27;
     check("an unknown exe is refused without changes",
         !initialize(&context)&&claims.empty()&&!memcmp((void*)va(0x48d520),original,sizeof(original)));
     joint[3]=0x48; setTaken[6]=1; deviceOffset[0]=0x38; screenCompare[1]=0xdf; setFullScreen[6]=1; brushIndex[0]=0;
     markHandled[0]=1; upAxis[0]=0x68; fontStore[0]=0x87; keyMapping[0]=0x20; typedResult[0]=0x85; nameLimit[0]=0x1f; soundFade[0]=0x41;
-    selectWindow[0]=0x4c; listedBits[0]=0x20;
+    selectWindow[0]=0x4c; listedBits[0]=0x20; corpseParts[0]=0x26;
 
     // This host has no onFrame, so the text input keyboard fix is skipped (text_input_native_probe has it).
     check("the Mod initializes on the known exe",initialize(&context)!=FALSE);
-    check("the Mod claims the fifteen game ranges after releasing the refused initialization",
-        claims.size()==15&&claimed(0x4ee380,6)&&claimed(0x4c5530,5)&&claimed(0x68a330,5)&&
+    check("the Mod claims the seventeen game ranges after releasing the refused initialization",
+        claims.size()==17&&claimed(0x4a0560,6)&&claimed(0x4f57f0,6)&&claimed(0x4ee380,6)&&claimed(0x4c5530,5)&&claimed(0x68a330,5)&&
         claimed(0x48d520,5)&&claimed(0x55e140,5)&&claimed(0x5383d0,9)&&
         claimed(0x538180,7)&&claimed(0x5384c0,6)&&claimed(0x4d9f50,5)&&claimed(0x6a2660,5)&&
         claimed(0x4f4be7,6)&&claimed(0x5f7607,6)&&claimed(0x5a1210,6)&&claimed(0x5a19e0,7)&&

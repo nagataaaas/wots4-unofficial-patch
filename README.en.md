@@ -30,6 +30,8 @@ It fixes the following problems. Detailed explanations of each fix (what the pro
 10. After opening Options on the title screen, choosing New Game, or loading a save made after the end of a playthrough with Load, can crash the game ([Details](docs/fixes/title_select_window.md))
 11. The game freezes for minutes when starting to play, or the first time Options is opened ([Details](docs/fixes/display_mode_list.md))
     - It happened on monitors with many display modes, such as 4K or high refresh rate monitors.
+12. A corpse with no obtainable items can still be searched over and over without yielding anything ([Details](docs/fixes/empty_corpse_loot.md))
+    - Excludes empty corpses regardless of character or difficulty. Bodies with an obtainable book or item remain searchable. Needs in-game confirmation.
 
 No further fixes are planned at the moment.
 If there is a bug you would like fixed, please open an Issue in this repository and it may be addressed.
@@ -89,6 +91,7 @@ Each fix has its own section. `enabled` set to `1` installs the fix, and `0` lea
 | `sound_slot_release` | `enabled` | `1` | 9. Keeps sound effects and voices from going silent, for example after torture. |
 | `title_select_window` | `enabled` | `1` | 10. Fixes the crash after opening Options on the title screen. |
 | `display_mode_list` | `enabled` | `1` | 11. Fixes the freeze of several minutes when starting to play or opening Options. |
+| `empty_corpse_loot` | `enabled` | `1` | 12. Keeps corpses with no obtainable items from remaining searchable. |
 
 ## Building
 

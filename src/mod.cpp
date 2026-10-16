@@ -96,6 +96,7 @@
 #include "sound_slots.h"
 #include "title_select_window.h"
 #include "display_mode_list.h"
+#include "empty_corpse_loot.h"
 
 namespace {
 
@@ -1181,6 +1182,188 @@ void __fastcall titleOptionsStateHook(uint8_t* title, void* unused, int32_t even
         log("title select window refresh: Options replaced the title's select window; the title uses the new one");
 }
 
+// ---- Empty corpse loot
+
+constexpr uintptr_t searchCorpse = 0x4a0560;  // ebx = player parameter, stack = radius, caller cleans
+constexpr uint32_t searchCorpseHookLength = 6;  // push ebp; mov ebp,esp; sub esp,0x3c
+constexpr uintptr_t corpseDropManager = 0x9e9690;
+constexpr uintptr_t characterDefinitionManager = 0x9e9640;
+constexpr uintptr_t corpseDropRow = 0x4f5340;     // eax = manager, stack = table ID; returns first item
+constexpr uintptr_t buildCorpseLoot = 0x4f57f0;   // eax = row's rate, stack = actor, output
+constexpr uint32_t buildCorpseLootHookLength = 6;  // push ebp; mov ebp,esp; sub esp,0x2c
+void* originalSearchCorpse;
+void* originalBuildCorpseLoot;
+
+bool emptyCorpseLootCodeMatches() {
+    const unsigned char searchEntry[] = {0x55,0x8b,0xec,0x83,0xec,0x3c};
+    const unsigned char row[] = {0x55,0x8b,0xec,0x51,0x56,0x8b,0xf0,0x57};
+    const unsigned char rowItems[] = {0x8d,0x44,0x50,0x04,0x5e};
+    const unsigned char builder[] = {0x55,0x8b,0xec,0x83,0xec,0x2c};
+    const unsigned char output[] = {0x8b,0x4d,0x0c,0x8d,0x43,0x04,0x8d,0x79,0x06,0x2b,0xd9,
+        0x89,0x45,0xec,0x89,0x7d,0xe8};
+    const unsigned char parts[] = {0x80,0xba,0x26,0x03,0x00,0x00,0x00,0x75,0x17};
+    const unsigned char search[] = {0x80,0xb8,0x25,0x03,0x00,0x00,0x00,0x0f,0x85,0xa3,0x00,0x00,0x00};
+    return same(searchCorpse,searchEntry,sizeof(searchEntry)) &&
+        readGamePointer(0x49c067)==va(corpseDropManager) && same(corpseDropRow,row,sizeof(row)) &&
+        same(0x4f5372,rowItems,sizeof(rowItems)) && same(buildCorpseLoot,builder,sizeof(builder)) &&
+        same(0x4f582e,output,sizeof(output)) && same(0x4f5acf,parts,sizeof(parts)) &&
+        same(0x4a0612,search,sizeof(search)) && readGamePointer(0x4f50f2)==va(characterDefinitionManager);
+}
+
+void* findCorpseDropRow(uintptr_t manager, int32_t table) {
+    const auto function=va(corpseDropRow);
+    void* items;
+    __asm {
+        mov eax, manager
+        push table
+        call function
+        mov items, eax
+    }
+    // The lookup returns the first item; the builder also takes the preceding two-byte rate.
+    return items?static_cast<uint8_t*>(items)-sizeof(uint16_t):nullptr;
+}
+
+void collectCorpseLoot(void* row, uint8_t* actor, unofficial_patch::CorpseLootCandidates* output) {
+    const auto function=va(buildCorpseLoot);
+    __asm {
+        mov eax, row
+        push output
+        push actor
+        call function
+    }
+}
+
+// The original draw uses table 1 if the character's definition is absent.
+bool corpseDropTable(const uint8_t* character, int32_t& table) {
+    const auto manager=readGamePointer(characterDefinitionManager);
+    if(!manager)
+        return false;
+    const auto active=*reinterpret_cast<const uintptr_t*>(manager);
+    if(!active||*reinterpret_cast<const int32_t*>(active)!=4)
+        return false;
+    const auto wrapper=*reinterpret_cast<const uintptr_t*>(active+0x24);
+    if(!wrapper)
+        return false;
+    const auto definitions=*reinterpret_cast<const uintptr_t*>(wrapper);
+    table=1;
+    const auto definition=*reinterpret_cast<const int32_t*>(character+unofficial_patch::characterDefinitionOffset);
+    if(!definitions||definition<0||definition>=*reinterpret_cast<const int32_t*>(definitions))
+        return true;
+    const auto offset=*reinterpret_cast<const int32_t*>(definitions+0xc+definition*sizeof(int32_t));
+    if(offset>0)
+        table=*reinterpret_cast<const int16_t*>(definitions+offset+0x26);
+    return true;
+}
+
+void __cdecl markEmptyCorpse(uint8_t* actor, const unofficial_patch::CorpseLootCandidates* candidates) {
+    auto character=*reinterpret_cast<uint8_t**>(actor+0xc);
+    if(!character||!(*reinterpret_cast<const uint32_t*>(character+unofficial_patch::characterStateOffset)&
+        unofficial_patch::deadOrDyingState))
+        return;
+    if(!unofficial_patch::hasCorpseLootCandidate(*candidates))
+        character[unofficial_patch::corpseLootedOffset]=1;
+}
+
+bool corpseHasNoLoot(uint8_t* actor) {
+    const auto state=readGamePointer(gameState);
+    const auto manager=readGamePointer(corpseDropManager);
+    if(!state||!manager)
+        return false;
+    const auto difficulty=*reinterpret_cast<const int8_t*>(state+0x18);
+    auto character=*reinterpret_cast<uint8_t**>(actor+0xc);
+    int32_t table;
+    if(difficulty<0||difficulty>3||!character||!corpseDropTable(character,table))
+        return false;
+    auto row=findCorpseDropRow(manager,table);
+    if(!row) {
+        character[unofficial_patch::corpseLootedOffset]=1;
+        return true;
+    }
+    unofficial_patch::CorpseLootCandidates candidates{};
+    collectCorpseLoot(row,actor,&candidates);
+    return !unofficial_patch::hasCorpseLootCandidate(candidates);
+}
+
+uint8_t* findOriginalCorpse(uint8_t* player, float radius) {
+    uint8_t* actor;
+    __asm {
+        mov ebx, player
+        push radius
+        call dword ptr [originalSearchCorpse]
+        add esp, 4
+        mov actor, eax
+    }
+    return actor;
+}
+
+// Search once more after excluding an empty body, so a nearby body with loot is still found.
+// Candidate preparation reads inventory and ownership without consuming items or random draws.
+uint8_t* __cdecl findLootableCorpse(uint8_t* player, float radius) {
+    auto actor=findOriginalCorpse(player,radius);
+    while(actor&&corpseHasNoLoot(actor))
+        actor=findOriginalCorpse(player,radius);
+    return actor;
+}
+
+__declspec(naked) void searchCorpseHook() {
+    __asm {
+        push dword ptr [esp+4]
+        push ebx
+        call findLootableCorpse
+        add esp, 8
+        ret
+    }
+}
+
+// Every loot/kick/death draw prepares candidates here. Empty candidates also end kick retries.
+__declspec(naked) void buildCorpseLootHook() {
+    __asm {
+        push dword ptr [esp+8]
+        push dword ptr [esp+8]
+        call dword ptr [originalBuildCorpseLoot]
+        pushfd
+        pushad
+        push dword ptr [esp+0x2c]  // Output
+        push dword ptr [esp+0x2c]  // Actor, accounting for the preceding argument
+        call markEmptyCorpse
+        add esp, 8
+        popad
+        popfd
+        ret 8
+    }
+}
+
+bool installEmptyCorpseLoot() {
+    if(!emptyCorpseLootCodeMatches()) {
+        log("empty corpse loot skipped: the corpse search or candidate builder is not the known version");
+        return false;
+    }
+    if(!host->claim(self,va(searchCorpse),searchCorpseHookLength)||
+        !host->claim(self,va(buildCorpseLoot),buildCorpseLootHookLength)) {
+        log("empty corpse loot skipped: the corpse search or candidate builder is used by another Mod");
+        return false;
+    }
+    auto searchTarget=reinterpret_cast<void*>(va(searchCorpse));
+    auto builderTarget=reinterpret_cast<void*>(va(buildCorpseLoot));
+    if(MH_CreateHook(searchTarget,reinterpret_cast<void*>(&searchCorpseHook),&originalSearchCorpse)!=MH_OK) {
+        log("empty corpse loot: could not create the corpse search hook; neither hook is installed");
+        return false;
+    }
+    if(MH_CreateHook(builderTarget,reinterpret_cast<void*>(&buildCorpseLootHook),&originalBuildCorpseLoot)!=MH_OK) {
+        MH_RemoveHook(searchTarget);
+        log("empty corpse loot: could not create the candidate hook; neither hook is installed");
+        return false;
+    }
+    if(MH_EnableHook(builderTarget)!=MH_OK||MH_EnableHook(searchTarget)!=MH_OK) {
+        MH_RemoveHook(builderTarget);
+        MH_RemoveHook(searchTarget);
+        log("empty corpse loot: could not enable both hooks; neither hook is installed");
+        return false;
+    }
+    log("empty corpse loot installed at 0x4a0560 and 0x4f57f0");
+    return true;
+}
+
 // ---- Settings
 
 wchar_t configPath[1024];  // mods\unofficial_patch\config.ini
@@ -1370,12 +1553,13 @@ extern "C" BOOL WINAPI ModInitialize(const wots4::ModContext* context) {
     bool depthMaskInstalled=fixEnabled(L"translucent_depth")&&installTranslucentDepthMask();
     bool fullwidthDigitsInstalled=fixEnabled(L"fullwidth_digits")&&installFullwidthDigits();
     bool soundSlotReleaseInstalled=fixEnabled(L"sound_slot_release")&&installSoundSlotRelease();
+    bool emptyCorpseLootInstalled=fixEnabled(L"empty_corpse_loot")&&installEmptyCorpseLoot();
     // After every hook, because a failed hook releases all of this Mod's reservations.
     bool anyPatchInstalled=false;
     for(auto& patch:codePatches)
         anyPatchInstalled|=installCodePatch(patch);
     if(!anySelected&&!depthMaskInstalled&&!fullwidthDigitsInstalled&&!soundSlotReleaseInstalled&&
-        !anyPatchInstalled) {
+        !anyPatchInstalled&&!emptyCorpseLootInstalled) {
         log("no fix can be installed; nothing changed");
         host->releaseClaims(self);
         MH_Uninitialize();

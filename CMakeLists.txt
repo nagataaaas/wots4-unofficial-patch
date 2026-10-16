@@ -138,4 +138,11 @@ if(WOTS4_BUILD_TESTS)
         LINK_OPTIONS /BASE:0x10000000 /DYNAMICBASE
         ARGS ${unpacked_native} $<TARGET_FILE:mod_unofficial_patch> NEEDS_EXE)
     add_dependencies(display_mode_list_native_probe mod_unofficial_patch)
+    # Runs drops and corpse searches on synthetic characters in an exe copy.
+    wots4_add_probe(empty_corpse_loot_native_probe SOURCES tests/empty_corpse_loot_native_probe.cpp
+        INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src
+        LINK_OPTIONS /BASE:0x10000000 /DYNAMICBASE
+        ARGS ${unpacked_native} $<TARGET_FILE:mod_unofficial_patch> NEEDS_EXE)
+    add_dependencies(empty_corpse_loot_native_probe mod_unofficial_patch)
+    set_tests_properties(empty_corpse_loot_native_probe PROPERTIES TIMEOUT 15)
 endif()
