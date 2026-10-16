@@ -28,6 +28,8 @@ It fixes the following problems. Detailed explanations of each fix (what the pro
    - Also lets the player's name take some kanji such as 鬼, 郎 and 龍, and fullwidth letters and digits, which it dropped.
 9. After torture or an arrest, the fishing success sound and the voices of shopkeepers and others stop playing, and opening or closing a menu plays the torture sound ([Details](docs/fixes/sound_slot_leak.md))
 10. After opening Options on the title screen, choosing New Game, or loading a save made after the end of a playthrough with Load, can crash the game ([Details](docs/fixes/title_select_window.md))
+11. The game freezes for minutes when starting to play, or the first time Options is opened ([Details](docs/fixes/display_mode_list.md))
+    - It happened on monitors with many display modes, such as 4K or high refresh rate monitors.
 
 No further fixes are planned at the moment.
 If there is a bug you would like fixed, please open an Issue in this repository and it may be addressed.
@@ -86,6 +88,7 @@ Each fix has its own section. `enabled` set to `1` installs the fix, and `0` lea
 | `player_name_characters` | `enabled` | `1` | 8. Lets the player's name take some kanji and fullwidth letters and digits. |
 | `sound_slot_release` | `enabled` | `1` | 9. Keeps sound effects and voices from going silent, for example after torture. |
 | `title_select_window` | `enabled` | `1` | 10. Fixes the crash after opening Options on the title screen. |
+| `display_mode_list` | `enabled` | `1` | 11. Fixes the freeze of several minutes when starting to play or opening Options. |
 
 ## Building
 

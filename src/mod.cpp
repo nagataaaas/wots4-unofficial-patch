@@ -58,6 +58,12 @@
 // Player name characters: the player name input drops characters from U+8000 up
 // (a signed comparison at 0x5f7604); its jump at 0x5f7607 only skips 0.
 //
+// Display mode list: the resolution list (0x536a90) tests every listed mode with
+// ChangeDisplaySettingsA(CDS_TEST) before dropping all but 32-bit modes of 640 pixels
+// and 60 Hz or more. The call at 0x536af9 answers "bad mode" for the dropped ones without
+// the test, which takes about 0.24 s for each 8 and 16-bit mode Windows lists, so the
+// list keeps the same modes without stopping the game for minutes.
+//
 // Sound slot release: a sound stopped while paused by a menu, or before the
 // slot update saw it playing, is freed like one that ended (0x5a1210), and a
 // slot taken from a playing sound when all 24 are in use stops that sound first
@@ -89,6 +95,7 @@
 #include "text_input.h"
 #include "sound_slots.h"
 #include "title_select_window.h"
+#include "display_mode_list.h"
 
 namespace {
 
@@ -924,11 +931,56 @@ void makePlayerNameCharacterPatch(unsigned char* bytes) {
     memcpy(bytes,jumpIfZero,sizeof(jumpIfZero));
 }
 
+// ---- Display mode list
+
+// call [ChangeDisplaySettingsA] with (the listed mode, CDS_TEST) in the resolution list (0x536a90)
+constexpr uintptr_t displayModeTest = 0x536af9;
+constexpr uint32_t displayModeTestLength = 6;
+constexpr uintptr_t changeDisplaySettingsImport = 0x90547c;
+constexpr uintptr_t enumDisplaySettingsImport = 0x905410;
+
+bool displayModeListCodeMatches() {
+    // push 2 (CDS_TEST); lea eax,[ebp-0xa8] (the listed mode); push eax; call [ChangeDisplaySettingsA]
+    const unsigned char test[] = {0x6a,0x02,0x8d,0x85,0x58,0xff,0xff,0xff,0x50,0xff,0x15};
+    // test eax,eax; jne (drop); cmp [ebp-0x40],0x20; jne; mov esi,[ebp-0x3c]; cmp esi,0x280; jb;
+    // cmp [ebp-0x30],0x3c; jb: the modes the list keeps (display_mode_list.h)
+    const unsigned char keeps[] = {0x85,0xc0,0x0f,0x85,0xaf,0x00,0x00,0x00,0x83,0x7d,0xc0,0x20,0x0f,0x85,0xa5,0x00,
+        0x00,0x00,0x8b,0x75,0xc4,0x81,0xfe,0x80,0x02,0x00,0x00,0x0f,0x82,0x96,0x00,0x00,0x00,0x83,0x7d,0xd0,0x3c,
+        0x0f,0x82,0x8c,0x00,0x00,0x00};
+    const unsigned char listsModes[] = {0xff,0x15};  // call [EnumDisplaySettingsA] (0x536ae0)
+    return same(0x536af0,test,sizeof(test)) && readGamePointer(0x536afb)==va(changeDisplaySettingsImport) &&
+        same(0x536aff,keeps,sizeof(keeps)) && same(0x536ae0,listsModes,sizeof(listsModes)) &&
+        readGamePointer(0x536ae2)==va(enumDisplaySettingsImport);
+}
+
+// Called by the game in place of ChangeDisplaySettingsA, once per listed mode while the list is
+// filled. Goes through the game's import, so other hooks on it still see the tests that remain.
+LONG WINAPI testListedDisplayMode(DEVMODEA* mode, DWORD flags) {
+    if(flags==CDS_TEST&&mode&&
+        !unofficial_patch::gameListsDisplayMode(mode->dmBitsPerPel,mode->dmPelsWidth,mode->dmDisplayFrequency))
+        return DISP_CHANGE_BADMODE;
+    auto changeDisplaySettings=reinterpret_cast<LONG (WINAPI*)(DEVMODEA*, DWORD)>(
+        readGamePointer(changeDisplaySettingsImport));
+    return changeDisplaySettings(mode,flags);
+}
+
+void makeDisplayModeListPatch(unsigned char* bytes) {
+    constexpr unsigned char callRelative = 0xe8;
+    constexpr unsigned char nop = 0x90;
+    auto next=va(displayModeTest)+5;
+    auto displacement=static_cast<int32_t>(reinterpret_cast<uintptr_t>(&testListedDisplayMode)-next);
+    bytes[0]=callRelative;
+    memcpy(bytes+1,&displacement,sizeof(displacement));
+    bytes[5]=nop;
+}
+
 const CodePatch codePatches[] = {
     {L"text_input_characters","text input characters",textInputCharacterCheck,textInputCharacterCheckLength,
         textInputCharacterCodeMatches,makeTextInputCharacterPatch},
     {L"player_name_characters","player name characters",playerNameCharacterSkip,playerNameCharacterSkipLength,
         playerNameCharacterCodeMatches,makePlayerNameCharacterPatch},
+    {L"display_mode_list","display mode list",displayModeTest,displayModeTestLength,
+        displayModeListCodeMatches,makeDisplayModeListPatch},
 };
 
 // ---- Sound slot release

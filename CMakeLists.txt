@@ -129,4 +129,13 @@ if(WOTS4_BUILD_TESTS)
         LINK_OPTIONS /BASE:0x10000000 /DYNAMICBASE
         ARGS ${unpacked_native} $<TARGET_FILE:mod_unofficial_patch> NEEDS_EXE)
     add_dependencies(title_select_window_native_probe mod_unofficial_patch)
+    # Checks, with synthetic modes, which modes the resolution list keeps
+    wots4_add_probe(display_mode_list_probe SOURCES tests/display_mode_list_probe.cpp
+        INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    # Loads mod.dll into a copy of the exe and fills the game's resolution list with fake
+    # EnumDisplaySettingsA and ChangeDisplaySettingsA (the display mode is not changed)
+    wots4_add_probe(display_mode_list_native_probe SOURCES tests/display_mode_list_native_probe.cpp
+        LINK_OPTIONS /BASE:0x10000000 /DYNAMICBASE
+        ARGS ${unpacked_native} $<TARGET_FILE:mod_unofficial_patch> NEEDS_EXE)
+    add_dependencies(display_mode_list_native_probe mod_unofficial_patch)
 endif()
