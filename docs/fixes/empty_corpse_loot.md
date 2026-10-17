@@ -1,9 +1,9 @@
 # Empty corpses remain searchable
 
-- Status: implemented, needs in-game confirmation
+- Status: confirmed in game (reported 2026-10-18)
 - Code: `src/empty_corpse_loot.h`, `src/mod.cpp` (`findLootableCorpse`, `buildCorpseLootHook`); hooks at `0x4a0560` and `0x4f57f0`
 - Tests: `empty_corpse_loot_native_probe` (64 passed, 0 failed); full Mod suite: 26 tests, 729 checks passed, 0 failed
-- Last updated: 2026-10-16
+- Last updated: 2026-10-18
 
 ## Problem
 
@@ -52,5 +52,4 @@ bodies, ordinary missed rolls, configuration and startup guards. No game files o
   tweaks' Guaranteed Loot. An empty list still has no item to give.
 - The check allocates no memory, performs no file I/O and logs nothing during corpse selection.
   Gameplay performance has not been measured.
-- In-game behavior, including the looting animation and interaction with Guaranteed Loot, needs
-  in-game confirmation.
+- Use together with tweaks' Guaranteed Loot has not been checked separately in game.

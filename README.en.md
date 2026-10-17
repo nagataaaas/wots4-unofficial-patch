@@ -31,7 +31,7 @@ It fixes the following problems. Detailed explanations of each fix (what the pro
 11. The game freezes for minutes when starting to play, or the first time Options is opened ([Details](docs/fixes/display_mode_list.md))
     - It happened on monitors with many display modes, such as 4K or high refresh rate monitors.
 12. A corpse with no obtainable items can still be searched over and over without yielding anything ([Details](docs/fixes/empty_corpse_loot.md))
-    - Excludes empty corpses regardless of character or difficulty. Bodies with an obtainable book or item remain searchable. Needs in-game confirmation.
+    - Excludes empty corpses regardless of character or difficulty. Bodies with an obtainable book or item remain searchable.
 
 No further fixes are planned at the moment.
 If there is a bug you would like fixed, please open an Issue in this repository and it may be addressed.
