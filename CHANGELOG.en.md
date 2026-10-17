@@ -4,6 +4,11 @@
 
 Fix numbers refer to the list in the [README](README.en.md#features).
 
+## [v2026.10.18](https://github.com/nagataaaas/wots4-unofficial-patch/releases/tag/v2026.10.18)
+
+- Added fix 11: the game froze for minutes when starting to play or when opening Options for the first time.
+- Added fix 12: a body with nothing left to obtain could be searched again and again without giving anything.
+
 ## [v2026.10.14.6](https://github.com/nagataaaas/wots4-unofficial-patch/releases/tag/v2026.10.14.6)
 
 - Tidied up the description of fix 9 in the README. No changes to how the Mod works.

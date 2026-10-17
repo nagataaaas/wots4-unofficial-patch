@@ -4,6 +4,11 @@
 
 修正の番号は [README](README.md#機能) の一覧の番号です。
 
+## [v2026.10.18](https://github.com/nagataaaas/wots4-unofficial-patch/releases/tag/v2026.10.18)
+
+- 修正 11 を追加しました：ゲームのプレイを始めるときや、初めてオプションを開くときに、数分間固まる問題
+- 修正 12 を追加しました：取得できる品が残っていない死体を、何も出ないまま何度でも漁れてしまう問題
+
 ## [v2026.10.14.6](https://github.com/nagataaaas/wots4-unofficial-patch/releases/tag/v2026.10.14.6)
 
 - README の修正 9 の説明を整理しました。Mod の動作の変更はありません。
