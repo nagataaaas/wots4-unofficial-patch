@@ -151,4 +151,13 @@ if(WOTS4_BUILD_TESTS)
         ARGS ${unpacked_native} $<TARGET_FILE:mod_unofficial_patch> NEEDS_EXE)
     add_dependencies(empty_corpse_loot_native_probe mod_unofficial_patch)
     set_tests_properties(empty_corpse_loot_native_probe PROPERTIES TIMEOUT 15)
+    # Checks, with synthetic render target groups, when the renderer's fallback is stopped
+    wots4_add_probe(render_target_recovery_probe SOURCES tests/render_target_recovery_probe.cpp
+        INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    # Loads mod.dll into a copy of the exe and runs the game's render target setting and lost device
+    # check with a synthetic renderer and a fake device (no GPU, the game is not started)
+    wots4_add_probe(render_target_recovery_native_probe SOURCES tests/render_target_recovery_native_probe.cpp
+        LINK_OPTIONS /BASE:0x10000000 /DYNAMICBASE
+        ARGS ${unpacked_native} $<TARGET_FILE:mod_unofficial_patch> NEEDS_EXE)
+    add_dependencies(render_target_recovery_native_probe mod_unofficial_patch)
 endif()

@@ -80,6 +80,10 @@
 // since Options deleted the title's. The New Game confirmation and the difficulty
 // selection after Load used the deleted window and could crash.
 //
+// Render target recovery: when the back buffer cannot be set as the render target (seen after
+// switching to another window), the renderer's fallback to it (0x88f300) no longer calls itself until
+// the stack overflows; the device is reset before the next frame (0x891f80) instead.
+//
 // Each fix is installed on its own, so a changed game or another Mod's hook
 // on one of them does not stop the others. Each can be turned off in
 // config.ini ([<section>] enabled=0).
@@ -102,6 +106,7 @@
 #include "title_select_window.h"
 #include "display_mode_list.h"
 #include "empty_corpse_loot.h"
+#include "render_target_recovery.h"
 
 namespace {
 
@@ -1417,6 +1422,122 @@ bool installEmptyCorpseLoot() {
     return true;
 }
 
+// ---- Render target recovery
+
+// NiDX9Renderer::BeginUsingRenderTargetGroup (vtable 0x947690 +0x178): thiscall (renderer, group,
+// clear flags), ret 8, returns al. Its only callers go through the vtable: NiRenderer's public
+// wrapper (0x4b5da0) and its own fallback to the default group (0x88f454).
+constexpr uintptr_t beginRenderTargetGroup = 0x88f300;
+constexpr uint32_t beginRenderTargetGroupHookLength = 11;  // push ebx; push ebp; mov ebp,ecx; cmp byte [ebp+0x570],0
+constexpr uintptr_t beginRenderTargetGroupSlot = 0x947808;  // vtable 0x947690 +0x178
+// NiDX9Renderer::LostDeviceRestore: thiscall (renderer), returns al; false skips the frame. Only
+// called first thing by BeginFrame (0x893d03), before anything of the frame is drawn.
+constexpr uintptr_t restoreLostDevice = 0x891f80;
+constexpr uint32_t restoreLostDeviceHookLength = 9;  // push edi; mov edi,ecx; mov eax,[edi+0x124]
+// NiDX9Renderer::Recreate: thiscall (renderer), returns al. Resets the device and takes the back
+// buffer again; what the game itself does when the device reports D3DERR_DEVICENOTRESET.
+constexpr uintptr_t recreateRenderer = 0x890e20;
+constexpr uint32_t rendererDeviceOffset = 0x124;  // IDirect3DDevice9* (0x891f83)
+
+unofficial_patch::RenderTargetRecovery renderTargetRecovery;
+unsigned failedRecoveryResets;
+bool (__fastcall* originalBeginRenderTargetGroup)(void* renderer, void* unused, void* group, uint32_t clearFlags);
+bool (__fastcall* originalRestoreLostDevice)(void* renderer);
+
+bool renderTargetRecoveryCodeMatches() {
+    const unsigned char begin[] = {0x53,0x55,0x8b,0xe9,0x80,0xbd,0x70,0x05,0x00,0x00,0x00};
+    // mov eax,[esp+0x18]; mov ecx,[ebp+0x6f8] (the default group); mov edx,[ebp]; mov edx,[edx+0x178];
+    // push eax; push ecx; mov ecx,ebp; call edx: the fallback when a buffer cannot be set
+    const unsigned char fallback[] = {0x8b,0x44,0x24,0x18,0x8b,0x8d,0xf8,0x06,0x00,0x00,0x8b,0x55,0x00,
+        0x8b,0x92,0x78,0x01,0x00,0x00,0x50,0x51,0x8b,0xcd,0xff,0xd2};
+    const unsigned char restore[] = {0x57,0x8b,0xf9,0x8b,0x87,0x24,0x01,0x00,0x00};
+    // cmp eax,D3DERR_DEVICENOTRESET; jne; mov ecx,edi; pop edi; jmp 0x890e20
+    const unsigned char notReset[] = {0x3d,0x69,0x08,0x76,0x88,0x75,0x08,0x8b,0xcf,0x5f,0xe9};
+    auto relativeTarget=[](uintptr_t instruction) {
+        return static_cast<uintptr_t>(instruction+5+*reinterpret_cast<const int32_t*>(va(instruction+1)));
+    };
+    return same(beginRenderTargetGroup,begin,sizeof(begin)) && same(0x88f454,fallback,sizeof(fallback)) &&
+        readGamePointer(beginRenderTargetGroupSlot)==va(beginRenderTargetGroup) &&
+        same(restoreLostDevice,restore,sizeof(restore)) && same(0x891f91,notReset,sizeof(notReset)) &&
+        relativeTarget(0x891f9b)==recreateRenderer && relativeTarget(0x893d03)==restoreLostDevice;
+}
+
+// Runs for every render target change of every frame, so it only compares and forwards. Logs once
+// when the back buffer stops working, not for each draw of the frames that follow.
+bool __fastcall beginRenderTargetGroupHook(void* renderer, void* unused, void* group, uint32_t clearFlags) {
+    bool resetAlreadyNeeded=renderTargetRecovery.resetNeeded;
+    if(!renderTargetRecovery.mayBegin(group)) {
+        if(!resetAlreadyNeeded)
+            log("render target recovery: the back buffer could not be set as the render target; "
+                "stopped the game's endless fallback and the device is reset at the next frame");
+        return false;
+    }
+    auto outer=renderTargetRecovery.start(group);
+    bool begun=originalBeginRenderTargetGroup(renderer,unused,group,clearFlags);
+    renderTargetRecovery.finish(outer);
+    return begun;
+}
+
+// Runs at the start of every frame. Without a pending reset it only tests one flag.
+bool __fastcall restoreLostDeviceHook(void* renderer) {
+    if(!renderTargetRecovery.resetNeeded)
+        return originalRestoreLostDevice(renderer);
+    auto device=*reinterpret_cast<IDirect3DDevice9**>(reinterpret_cast<uintptr_t>(renderer)+rendererDeviceOffset);
+    bool gameResets=device->TestCooperativeLevel()==D3DERR_DEVICENOTRESET;
+    if(!originalRestoreLostDevice(renderer))
+        return false;  // Still lost, or the game's own reset failed: the frame is skipped, try again
+    if(!gameResets) {
+        auto recreate=reinterpret_cast<bool (__fastcall*)(void* renderer)>(va(recreateRenderer));
+        if(!recreate(renderer)) {
+            if(++failedRecoveryResets==1)
+                log("render target recovery: the device reset failed; frames are skipped and the reset "
+                    "is tried again at each frame (later failures are not logged)");
+            return false;
+        }
+    }
+    renderTargetRecovery.resetNeeded=false;
+    char line[200];
+    sprintf_s(line,"render target recovery: the device was reset %s after %u failed reset(s); drawing continues",
+        gameResets?"by the game":"by this fix",failedRecoveryResets);
+    log(line);
+    failedRecoveryResets=0;
+    return true;
+}
+
+// Both hooks are installed together or not at all, as one fix.
+bool installRenderTargetRecovery() {
+    if(!renderTargetRecoveryCodeMatches()) {
+        log("render target recovery skipped: the game code at 0x88f300 or 0x891f80 is not the known version");
+        return false;
+    }
+    if(!host->claim(self,va(beginRenderTargetGroup),beginRenderTargetGroupHookLength)||
+        !host->claim(self,va(restoreLostDevice),restoreLostDeviceHookLength)) {
+        log("render target recovery skipped: 0x88f300 or 0x891f80 is used by another Mod");
+        return false;
+    }
+    auto beginTarget=reinterpret_cast<void*>(va(beginRenderTargetGroup));
+    auto restoreTarget=reinterpret_cast<void*>(va(restoreLostDevice));
+    if(MH_CreateHook(beginTarget,reinterpret_cast<void*>(&beginRenderTargetGroupHook),
+        reinterpret_cast<void**>(&originalBeginRenderTargetGroup))!=MH_OK) {
+        log("render target recovery: could not create the hook at 0x88f300; not installed");
+        return false;
+    }
+    if(MH_CreateHook(restoreTarget,reinterpret_cast<void*>(&restoreLostDeviceHook),
+        reinterpret_cast<void**>(&originalRestoreLostDevice))!=MH_OK) {
+        MH_RemoveHook(beginTarget);
+        log("render target recovery: could not create the hook at 0x891f80; not installed");
+        return false;
+    }
+    if(MH_EnableHook(restoreTarget)!=MH_OK||MH_EnableHook(beginTarget)!=MH_OK) {
+        MH_RemoveHook(beginTarget);
+        MH_RemoveHook(restoreTarget);
+        log("render target recovery: could not enable both hooks; not installed");
+        return false;
+    }
+    log("render target recovery installed at 0x88f300 and 0x891f80");
+    return true;
+}
+
 // ---- Settings
 
 wchar_t configPath[1024];  // mods\unofficial_patch\config.ini
@@ -1610,12 +1731,13 @@ extern "C" BOOL WINAPI ModInitialize(const wots4::ModContext* context) {
     bool fullwidthDigitsInstalled=fixEnabled(L"fullwidth_digits")&&installFullwidthDigits();
     bool soundSlotReleaseInstalled=fixEnabled(L"sound_slot_release")&&installSoundSlotRelease();
     bool emptyCorpseLootInstalled=fixEnabled(L"empty_corpse_loot")&&installEmptyCorpseLoot();
+    bool renderTargetRecoveryInstalled=fixEnabled(L"render_target_recovery")&&installRenderTargetRecovery();
     // After every hook, because a failed hook releases all of this Mod's reservations.
     bool anyPatchInstalled=false;
     for(auto& patch:codePatches)
         anyPatchInstalled|=installCodePatch(patch);
     if(!anySelected&&!depthMaskInstalled&&!fullwidthDigitsInstalled&&!soundSlotReleaseInstalled&&
-        !anyPatchInstalled&&!emptyCorpseLootInstalled) {
+        !anyPatchInstalled&&!emptyCorpseLootInstalled&&!renderTargetRecoveryInstalled) {
         log("no fix can be installed; nothing changed");
         host->releaseClaims(self);
         MH_Uninitialize();

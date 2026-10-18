@@ -40,7 +40,8 @@ int main(int argc, char** argv) {
         "[listener_orientation]\r\nenabled=0\r\n[stereo_3d_sound]\r\nenabled=0\r\n[fullwidth_digits]\r\nenabled=0\r\n"
         "[text_input_keyboard]\r\nenabled=0\r\n[text_input_characters]\r\nenabled=0\r\n"
         "[player_name_characters]\r\nenabled=0\r\n[sound_slot_release]\r\nenabled=0\r\n"
-        "[title_select_window]\r\nenabled=0\r\n[display_mode_list]\r\nenabled=0\r\n[empty_corpse_loot]\r\nenabled=0\r\n");
+        "[title_select_window]\r\nenabled=0\r\n[display_mode_list]\r\nenabled=0\r\n[empty_corpse_loot]\r\nenabled=0\r\n"
+        "[render_target_recovery]\r\nenabled=0\r\n");
     check("every fix disabled: the Mod refuses to load",!initialize(&context));
     check("every fix disabled: nothing is claimed or written",
         claims.empty()&&!memcmp((void*)va(0x48d520),originalRelease,sizeof(originalRelease)));
@@ -58,7 +59,10 @@ int main(int argc, char** argv) {
         loggedText("[player_name_characters] disabled in config.ini")&&
         loggedText("[sound_slot_release] disabled in config.ini")&&
         loggedText("[title_select_window] disabled in config.ini")&&
-        loggedText("[display_mode_list] disabled in config.ini")&&loggedText("[empty_corpse_loot] disabled in config.ini"));
+        loggedText("[display_mode_list] disabled in config.ini")&&loggedText("[empty_corpse_loot] disabled in config.ini")&&
+        loggedText("[render_target_recovery] disabled in config.ini"));
+    check("the render target setting and the lost device check are left unchanged",
+        *(unsigned char*)va(0x88f300)==0x53&&*(unsigned char*)va(0x891f80)==0x57);
     check("corpse search and candidate preparation are left unchanged",
         *(unsigned char*)va(0x4a0560)==0x55&&*(unsigned char*)va(0x4f57f0)==0x55);
     check("the text input and the player name input are left unchanged",
@@ -81,7 +85,8 @@ int main(int argc, char** argv) {
         "[listener_orientation]\r\nenabled=0\r\n[stereo_3d_sound]\r\nenabled=0\r\n[fullwidth_digits]\r\nenabled=0\r\n"
         "[text_input_keyboard]\r\nenabled=0\r\n[text_input_characters]\r\nenabled=0\r\n"
         "[player_name_characters]\r\nenabled=0\r\n[sound_slot_release]\r\nenabled=0\r\n"
-        "[title_select_window]\r\nenabled=0\r\n[display_mode_list]\r\nenabled=0\r\n[empty_corpse_loot]\r\nenabled=0\r\n");
+        "[title_select_window]\r\nenabled=0\r\n[display_mode_list]\r\nenabled=0\r\n[empty_corpse_loot]\r\nenabled=0\r\n"
+        "[render_target_recovery]\r\nenabled=0\r\n");
     check("one fix enabled: the Mod initializes",initialize(&context)!=FALSE);
     check("only the enabled fix is claimed (0x55e140)",claims.size()==1&&claimed(0x55e140,5));
     check("the disabled fix leaves 0x48d520 unchanged",
