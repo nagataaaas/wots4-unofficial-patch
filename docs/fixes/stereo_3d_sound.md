@@ -7,9 +7,15 @@
 
 ## Problem
 
-More than 65 sound effects are never heard at all, for example the fishing splashes, doors and gates opening and closing, explosions, fireworks, the gambling dens, and the torture devices (the water wheel, hanging and stone embrace).
+65 sound effects are never heard at all (the [list](#sound-effects-that-never-played) is below), for example the fishing splashes, doors and gates opening and closing, explosions, fireworks, the gambling dens, and the torture devices (the water wheel, hanging and stone embrace).
 
 After a few casts or catches when fishing, the voices of shopkeepers and other characters are no longer heard either, and some other sound effects go missing. It lasts until the game is restarted.
+
+For reference, fishing before and after the fix (852x480 with sound; turn the sound on). Before the fix the splashes are not heard. After the fix they are.
+
+| Before | After |
+| --- | --- |
+| <video src="../assets/stereo_3d_sound/unfixed.mp4" controls width="400"></video><br>[unfixed.mp4](../assets/stereo_3d_sound/unfixed.mp4) | <video src="../assets/stereo_3d_sound/fixed.mp4" controls width="400"></video><br>[fixed.mp4](../assets/stereo_3d_sound/fixed.mp4) |
 
 ## Cause
 
@@ -19,7 +25,7 @@ Some sound effects are both spatial (3D) and streamed from a stereo file, for ex
 
 Looping sounds of this kind are stopped by their code and freed by the [sound slot release](sound_slot_leak.md) fix. One-shot sounds such as the splash of a cast (`fishing1`) and of a catch (`up_water`) are never stopped, so each one takes a slot for good. With the music, 4 of them fill the 5 streams, and streamed voices go silent.
 
-65 sound effects whose files could be checked are stereo streams marked as spatial (a few more have files that could not be resolved), so all of them stay silent, and places other than fishing can leak slots the same way.
+65 sound effects of the Japanese data (`SoundEffectInfo.l`) are stereo streams marked as spatial, so all of them stay silent, and places other than fishing can leak slots the same way.
 
 ## Possible fixes
 
@@ -43,7 +49,89 @@ Tests (the game is not started): `stereo_3d_sound_native_probe` runs the game's 
 
 Confirmed in game: voices keep playing after fishing. Not checked one by one: the volume of each of the other sounds that now play.
 
+## Sound effects that never played
+
+The sound effects of the Japanese data that are streamed, spatial and stereo, by sound effect ID. What each one is was guessed from its file name and has not been checked by listening. "Loop" marks sounds that play until stopped; the length is one pass of the file.
+
+Fishing and torture:
+
+| ID | File | Likely use | Loop | Length |
+| --- | --- | --- | --- | --- |
+| 351 | `fishing1` | Fishing: splash of a cast | | 0.3 s |
+| 352 | `fishing2` | Fishing: water around the float | Loop | 1.9 s |
+| 303 | `up_water` | Splash of a catch | | 1.3 s |
+| 359 | `water_mill` | Torture: water wheel | Loop | 3.7 s |
+| 360 | `stake` | Torture: hanging | Loop | 7.4 s |
+| 361 | `stone_embrace1` | Torture: stone embrace | | 0.3 s |
+| 320 | `torture_remove` | Release from torture | | 1.4 s |
+
+Doors, gates and devices:
+
+| ID | File | Likely use | Loop | Length |
+| --- | --- | --- | --- | --- |
+| 374, 375 | `door_open`, `door_close` | Door opening and closing | | 0.8 s, 0.5 s |
+| 348, 349 | `sliddoor_close`, `sliddoor_open` | Sliding door | | 0.4 s, 0.7 s |
+| 382, 383, 414 | `gate_open2`, `gate_close2`, `gate_close3` | Gate opening and closing | | 3.2 s, 3.6 s, 2.7 s |
+| 384 | `jail_open` | Jail door | | 5.1 s |
+| 319 | `lock_open` | Unlocking | | 2.1 s |
+| 294 | `open_floor` | Opening the floor (a hidden door) | | 0.5 s |
+| 300 | `pulley` | Pulley | Loop | 2.8 s |
+| 305, 306 | `wire_slip`, `wire_cut` | Rope slipping, rope cut | Loop (305) | 2.0 s, 0.4 s |
+| 322, 323 | `fense_fall`, `stop_fall` | Fence falling, fall stopping | | 6.3 s, 1.0 s |
+| 307, 308, 309 | `chimney_hit`, `chimney_fall`, `chimney_down` | Chimney hit and falling | | 3.1 s, 6.9 s, 6.3 s |
+| 377, 354 | `bed_flip`, `nc_bed_flip` | Bed flipped over | | 0.9 s, 6.2 s |
+
+Explosions, guns and fireworks:
+
+| ID | File | Likely use | Loop | Length |
+| --- | --- | --- | --- | --- |
+| 311, 312 | `bs_explosion`, `bs_large_explosion` | Explosion, large explosion | | 3.3 s, 8.9 s |
+| 313 | `bs_fireball` | Fireball | Loop | 9.5 s |
+| 310 | `bs_simmers` | Smouldering | Loop | 2.6 s |
+| 314 | `bs_sink` | Sinking | Loop | 21.3 s |
+| 292 | `toguro_explosion` | Explosion | | 0.9 s |
+| 316 | `draw_cannon` | Pulling a cannon | Loop | 2.7 s |
+| 296 | `teppou_setup` | Readying a gun | | 0.5 s |
+| 289, 290 | `fly_fireworks2`, `up_fireworks2` | Fireworks rising and bursting | | 1.4 s, 0.8 s |
+
+Gambling and games:
+
+| ID | File | Likely use | Loop | Length |
+| --- | --- | --- | --- | --- |
+| 346, 347 | `tobaku1`, `tobaku2` | Gambling | | 0.8 s, 0.3 s |
+| 378, 379 | `roulette1`, `roulette2` | Roulette | Loop | 4.3 s, 2.1 s |
+| 299, 324 | `cardputter`, `card_dance` | Placing cards, cards flying | Loop (299) | 0.9 s, 0.7 s |
+| 355 | `nc_bingo` | Bingo | | 1.6 s |
+
+Crowds, battles and surroundings:
+
+| ID | File | Likely use | Loop | Length |
+| --- | --- | --- | --- | --- |
+| 195, 196 | `gy_battle1`, `gy_battle2` | Battle noise | | 60.1 s, 31.0 s |
+| 405, 406 | `gy_battle3`, `gy_battle4` | Battle noise | Loop | 13.5 s, 7.5 s |
+| 190, 276 | `gy_enkai` | Banquet chatter (one file, two IDs) | Loop (276) | 5.9 s |
+| 403, 404 | `kenjutu_buzz`, `kenjutu_cheer` | Sword match crowd, cheers | Loop | 3.5 s, 4.5 s |
+| 183 | `amb_bell2` | Bell | | 5.3 s |
+| 388 | `japan_drum` | Drum | | 1.3 s |
+| 204 | `horseshoe` | Horse hooves | | 19.9 s |
+| 317 | `militaryshoes` | Marching boots | Loop | 2.2 s |
+| 281 | `Row_boat` | Rowing a boat | Loop | 2.9 s |
+
+Others:
+
+| ID | File | Likely use | Loop | Length |
+| --- | --- | --- | --- | --- |
+| 288 | `telegraphic2` | Telegraph | Loop | 3.3 s |
+| 291 | `teacup` | Teacup | | 0.4 s |
+| 295 | `transform` | Transformation | | 2.6 s |
+| 315 | `map_put` | Putting down a map | | 3.0 s |
+| 318 | `whistle` | Whistle | | 0.5 s |
+| 321 | `pour_your` | Pouring | | 6.1 s |
+| 350 | `wepon_melt` | Melting a weapon (blacksmith) | | 2.8 s |
+| 397 | `camera` | Camera (the photographer) | | 0.3 s |
+
 ## Notes
 
 - Slots that leaked before the Mod was installed, or in a session without it, stay until the game is restarted.
 - The game updates the 3D position of these sounds every frame (`0x6a2f50`); without IDirectSound3DBuffer that update does nothing, as before.
+- Two pieces of music are also stereo streams marked as spatial (BGM 38 `S4_M37_Release` and 40 `S3_M19_Battle_Normal`). Whether music is ever played with a position, which is what makes it go through the 3D play, has not been checked; they are not counted above. No character voice matches.
