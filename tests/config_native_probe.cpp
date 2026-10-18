@@ -37,7 +37,7 @@ int main(int argc, char** argv) {
     writeConfig("[follow_detach]\r\nenabled=0\r\n[property_return]\r\nenabled=0\r\n[translucent_depth]\r\nenabled=0\r\n"
         "[physical_screen_check]\r\nenabled=0\r\n[skip_full_screen_reapply]\r\nenabled=0\r\n"
         "[no_white_background]\r\nenabled=0\r\n[yobai_result_reset]\r\nenabled=0\r\n"
-        "[listener_orientation]\r\nenabled=0\r\n[fullwidth_digits]\r\nenabled=0\r\n"
+        "[listener_orientation]\r\nenabled=0\r\n[stereo_3d_sound]\r\nenabled=0\r\n[fullwidth_digits]\r\nenabled=0\r\n"
         "[text_input_keyboard]\r\nenabled=0\r\n[text_input_characters]\r\nenabled=0\r\n"
         "[player_name_characters]\r\nenabled=0\r\n[sound_slot_release]\r\nenabled=0\r\n"
         "[title_select_window]\r\nenabled=0\r\n[display_mode_list]\r\nenabled=0\r\n[empty_corpse_loot]\r\nenabled=0\r\n");
@@ -51,6 +51,7 @@ int main(int argc, char** argv) {
         loggedText("[no_white_background] disabled in config.ini")&&
         loggedText("[yobai_result_reset] disabled in config.ini")&&
         loggedText("[listener_orientation] disabled in config.ini")&&
+        loggedText("[stereo_3d_sound] disabled in config.ini")&&
         loggedText("[fullwidth_digits] disabled in config.ini")&&
         loggedText("[text_input_keyboard] disabled in config.ini")&&
         loggedText("[text_input_characters] disabled in config.ini")&&
@@ -66,6 +67,7 @@ int main(int argc, char** argv) {
         *(unsigned char*)va(0x4c5530)==0x55&&*(unsigned char*)va(0x68a330)==0xb8);
     check("the display mode check is left unchanged",*(unsigned char*)va(0x5383d0)==0x55);
     check("the 3D sound listener is left unchanged",*(unsigned char*)va(0x6a2660)==0x55);
+    check("the 3D sound play is left unchanged",*(unsigned char*)va(0x6a3270)==0x55);
     check("the sound stop and slot pick are left unchanged",
         *(unsigned char*)va(0x5a1210)==0x55&&*(unsigned char*)va(0x5a19e0)==0x55);
     check("the save data load is left unchanged",*(unsigned char*)va(0x4d9f50)==0x55);
@@ -76,7 +78,7 @@ int main(int argc, char** argv) {
     writeConfig("[follow_detach]\r\nenabled=0\r\n[property_return]\r\nenabled=yes\r\n[translucent_depth]\r\nenabled=0\r\n"
         "[physical_screen_check]\r\nenabled=0\r\n[skip_full_screen_reapply]\r\nenabled=0\r\n"
         "[no_white_background]\r\nenabled=0\r\n[yobai_result_reset]\r\nenabled=0\r\n"
-        "[listener_orientation]\r\nenabled=0\r\n[fullwidth_digits]\r\nenabled=0\r\n"
+        "[listener_orientation]\r\nenabled=0\r\n[stereo_3d_sound]\r\nenabled=0\r\n[fullwidth_digits]\r\nenabled=0\r\n"
         "[text_input_keyboard]\r\nenabled=0\r\n[text_input_characters]\r\nenabled=0\r\n"
         "[player_name_characters]\r\nenabled=0\r\n[sound_slot_release]\r\nenabled=0\r\n"
         "[title_select_window]\r\nenabled=0\r\n[display_mode_list]\r\nenabled=0\r\n[empty_corpse_loot]\r\nenabled=0\r\n");

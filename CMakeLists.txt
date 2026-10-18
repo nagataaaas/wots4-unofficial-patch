@@ -105,6 +105,12 @@ if(WOTS4_BUILD_TESTS)
         LINK_OPTIONS /BASE:0x10000000 /DYNAMICBASE
         ARGS ${unpacked_native} $<TARGET_FILE:mod_unofficial_patch> NEEDS_EXE)
     add_dependencies(listener_orientation_native_probe mod_unofficial_patch)
+    # Loads mod.dll into a copy of the exe and runs the game's 3D sound play with fake DirectSound
+    # buffers with and without 3D control (no audio device is opened, the game is not started)
+    wots4_add_probe(stereo_3d_sound_native_probe SOURCES tests/stereo_3d_sound_native_probe.cpp
+        LINK_OPTIONS /BASE:0x10000000 /DYNAMICBASE
+        ARGS ${unpacked_native} $<TARGET_FILE:mod_unofficial_patch> NEEDS_EXE)
+    add_dependencies(stereo_3d_sound_native_probe mod_unofficial_patch)
     # Checks, with synthetic values, when the keyboard buttons are paused and which typed characters are taken
     wots4_add_probe(text_input_probe SOURCES tests/text_input_probe.cpp
         INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src)

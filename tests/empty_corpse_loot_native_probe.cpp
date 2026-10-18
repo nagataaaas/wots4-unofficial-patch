@@ -169,7 +169,7 @@ static bool writeSettings(const wchar_t* path, bool enabled) {
     if(_wfopen_s(&file,path,L"wb")||!file) return false;
     const char* disabled[]={"follow_detach","property_return","translucent_depth","physical_screen_check",
         "skip_full_screen_reapply","no_white_background","yobai_result_reset","listener_orientation",
-        "fullwidth_digits","sound_slot_release","text_input_keyboard","text_input_characters",
+        "stereo_3d_sound","fullwidth_digits","sound_slot_release","text_input_keyboard","text_input_characters",
         "player_name_characters","title_select_window","display_mode_list"};
     for(auto section:disabled) fprintf(file,"[%s]\r\nenabled=0\r\n",section);
     // Missing keys enable fixes, so the successful installation also tests the default.

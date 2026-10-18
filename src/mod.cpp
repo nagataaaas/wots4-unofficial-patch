@@ -47,6 +47,11 @@
 // back speakers of a 7.1 mix, where they are nearly silent on stereo output
 // without a virtual surround such as Windows Sonic.
 //
+// Stereo 3D sound fallback: a spatial sound whose buffer has no 3D control
+// (stereo streams such as the fishing splashes) fails in 0x6a3270 before Play
+// and its slot is never freed, so streamed voices go silent once 5 streams are
+// taken. Such a sound is played in 2D instead.
+//
 // Text input keyboard buttons: while the shared text input of the sect name and
 // weapon names (0x4f4b10) is polled, the keyboard does not act as pad buttons, as
 // in the player name input, so E (Back) and Space (OK) can be typed through the IME.
@@ -645,6 +650,54 @@ __declspec(naked) void setListenerHook() {
         pop ebx
         ret 8
     }
+}
+
+// ---- Stereo 3D sound fallback
+
+// AudioLib: plays a Sound in 3D. (Sound, DS3DBUFFER parameters, play flags), ret 0xc, returns an
+// HRESULT. Only called by 0x6a2b60, which starts every spatial sound of a slot.
+constexpr uintptr_t playSound3d = 0x6a3270;
+constexpr uint32_t playSound3dHookLength = 6;  // push ebp; mov ebp,esp; sub esp,0xc
+// AudioLib: plays a Sound in 2D. (Sound, play flags), ret 8, returns an HRESULT. 0x6a2b00 uses it.
+constexpr uintptr_t playSound2d = 0x6a31e0;
+constexpr uintptr_t iidDirectSound3DBuffer = 0x962f50;
+
+HRESULT (__stdcall* originalPlaySound3d)(void* sound, void* parameters, uint32_t playFlags);
+bool loggedStereoFallback;
+
+bool stereo3dSoundCodeMatches() {
+    const unsigned char prologue[] = {0x55,0x8b,0xec,0x83,0xec,0x0c,0x53,0x56,0x57,0x8b,0x7d,0x08};
+    // mov eax,[esi]; mov edx,[eax]; lea ecx,[ebp-4]; push ecx; push IID_IDirectSound3DBuffer
+    const unsigned char queryInterface[] = {0x8b,0x06,0x8b,0x10,0x8d,0x4d,0xfc,0x51,0x68};
+    const unsigned char afterQuery[] = {0x56,0xff,0xd2,0x8b,0xf8,0x85,0xff,0x78};  // push esi; call edx; ...; js
+    const unsigned char play2d[] = {0x55,0x8b,0xec,0x51,0x53,0x56,0x57,0x8b,0x7d,0x08};
+    const GUID directSound3DBuffer = {0x279afa86,0x4981,0x11ce,{0xa5,0x21,0x00,0x20,0xaf,0x0b,0xe5,0x60}};
+    return same(playSound3d,prologue,sizeof(prologue)) && same(0x6a32f6,queryInterface,sizeof(queryInterface)) &&
+        readGamePointer(0x6a32ff)==va(iidDirectSound3DBuffer) && same(0x6a3303,afterQuery,sizeof(afterQuery)) &&
+        same(iidDirectSound3DBuffer,reinterpret_cast<const unsigned char*>(&directSound3DBuffer),
+            sizeof(directSound3DBuffer)) &&
+        same(playSound2d,play2d,sizeof(play2d)) &&
+        static_cast<uintptr_t>(0x6a2c72+*reinterpret_cast<const int32_t*>(va(0x6a2c6e)))==playSound3d;
+}
+
+// A stereo stream is created without 3D control (only mono gets it), so asking its buffer for
+// IDirectSound3DBuffer fails and the original returns before Play. The slot then never sees the
+// sound play or end and is never freed. Playing it in 2D lets it be heard and end normally.
+// Runs once per spatial sound start, not every frame; logs only the first fallback.
+HRESULT __stdcall playSound3dHook(void* sound, void* parameters, uint32_t playFlags) {
+    HRESULT result=originalPlaySound3d(sound,parameters,playFlags);
+    if(result!=E_NOINTERFACE)
+        return result;
+    auto playIn2d=reinterpret_cast<HRESULT (__stdcall*)(void*, uint32_t)>(va(playSound2d));
+    result=playIn2d(sound,playFlags);
+    if(!loggedStereoFallback) {
+        loggedStereoFallback=true;
+        char line[160];
+        sprintf_s(line,"stereo 3D sound fallback: a sound without 3D control was played in 2D "
+            "(HRESULT 0x%08x); later fallbacks are not logged",static_cast<unsigned>(result));
+        log(line);
+    }
+    return result;
 }
 
 // ---- Fullwidth digits
@@ -1425,6 +1478,9 @@ Fix fixes[] = {
     {L"listener_orientation","listener orientation",setListener,setListenerHookLength,
         reinterpret_cast<void*>(&setListenerHook),&originalSetListener,
         listenerOrientationCodeMatches,false},
+    {L"stereo_3d_sound","stereo 3D sound fallback",playSound3d,playSound3dHookLength,
+        reinterpret_cast<void*>(&playSound3dHook),reinterpret_cast<void**>(&originalPlaySound3d),
+        stereo3dSoundCodeMatches,false},
     {L"text_input_keyboard","text input keyboard buttons",pollTextInput,pollTextInputHookLength,
         reinterpret_cast<void*>(&pollTextInputHook),reinterpret_cast<void**>(&originalPollTextInput),
         textInputKeyboardCodeMatches,false,true},
