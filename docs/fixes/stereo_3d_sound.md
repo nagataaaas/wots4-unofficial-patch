@@ -15,7 +15,7 @@ For reference, fishing before and after the fix (852x480 with sound; turn the so
 
 | Before | After |
 | --- | --- |
-| <video src="https://github.com/nagataaaas/wots4-unofficial-patch/raw/refs/heads/master/docs/assets/stereo_3d_sound/unfixed.mp4" controls width="400"></video><br>[unfixed.mp4](../assets/stereo_3d_sound/unfixed.mp4) | <video src="https://github.com/nagataaaas/wots4-unofficial-patch/raw/refs/heads/master/docs/assets/stereo_3d_sound/fixed.mp4" controls width="400"></video><br>[fixed.mp4](../assets/stereo_3d_sound/fixed.mp4) |
+| https://github.com/user-attachments/assets/3c2745ab-6478-46e8-82e8-08cc42489c4b | https://github.com/user-attachments/assets/3a685329-173b-441b-8b17-998e1c2f1c88 |
 
 ## Cause
 
