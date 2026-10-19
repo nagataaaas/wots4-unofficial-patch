@@ -2,7 +2,14 @@
 
 [日本語](CHANGELOG.md)
 
-Fix numbers refer to the list in the [README](README.en.md#features).
+Fix numbers refer to the list in the [README](README.en.md#features) of that version.
+
+## [v2026.10.19](https://github.com/nagataaaas/wots4-unofficial-patch/releases/tag/v2026.10.19)
+
+- Added fix 3: switching to another window could crash the game.
+- Added fix 7: more than 65 sound effects never played.
+- Added fix 8: after fishing, the voices of shopkeepers and others stopped playing.
+- Reordered the README's list of fixes by impact. The fix numbers change from this version.
 
 ## [v2026.10.18](https://github.com/nagataaaas/wots4-unofficial-patch/releases/tag/v2026.10.18)
 

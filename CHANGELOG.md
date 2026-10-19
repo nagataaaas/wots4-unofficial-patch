@@ -2,7 +2,14 @@
 
 [English](CHANGELOG.en.md)
 
-修正の番号は [README](README.md#機能) の一覧の番号です。
+修正の番号は、その版の [README](README.md#機能) の一覧の番号です。
+
+## [v2026.10.19](https://github.com/nagataaaas/wots4-unofficial-patch/releases/tag/v2026.10.19)
+
+- 修正 3 を追加しました：別のウィンドウに切り替えたときに、クラッシュすることがある問題
+- 修正 7 を追加しました：65 個以上の効果音が一度も鳴らない問題
+- 修正 8 を追加しました：釣りをすると、そのあと店の人などの声が鳴らなくなる問題
+- README の修正の一覧を、影響の大きい順に並べ直しました。この版から修正の番号が変わります。
 
 ## [v2026.10.18](https://github.com/nagataaaas/wots4-unofficial-patch/releases/tag/v2026.10.18)
 
